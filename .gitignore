@@ -1,0 +1,10 @@
+local_data/*
+.Rproj.user
+data/phenodata.txt
+phenodata.txt
+*.RData
+*.png
+*.html
+*.pdf
+*.xls
+*.xlsx
