@@ -12,7 +12,15 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 
 ### Preprocessing
 
+- [XCMS_processing.Rmd](XCMS_processing.Rmd): alignment (retention
+  time correction) and correspondence (grouping of peaks across samples) 
+  of the data for 1 specific polarity.
+- [XCMS_peak_filling.Rmd](XCMS_peak_filling.Rmd): peak filling of data for 1 specific polarity.  
+
 ### Normalization
+
+- [normalization.Rmd](normalization.Rmd): implementation of various data 
+normalisation approaches (between-sample, within-batch and between-batch) for 1 specific polarity.  
 
 ## Required packages and setup
 
