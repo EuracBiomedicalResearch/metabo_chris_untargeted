@@ -1,6 +1,5 @@
 ---
-title: "XCMS processing"
-subtitle: "CHRIS study"
+title: "XCMS processing of the untargeted metabolomics data from CHRIS"
 author: "Mar Garcia-Aloy, Johannes Rainer"
 output: 
   BiocStyle::html_document:
@@ -26,7 +25,7 @@ We load all required libraries, and we set up the parallel processing.
 ## Parameters
 
 ```{r parameters}
-polarity <- "NEG" # specify "POS" or "NEG"
+polarity <- "POS" # specify "POS" or "NEG"
 exclusion <- c("041016_BLANK_POS_1",
                "041016_BLANK_POS_2-041016_BLANK_POS_1",
                "041016_BLANK_POS_2",
