@@ -1,6 +1,5 @@
 ---
-title: "XCMS processing"
-subtitle: "CHRIS study"
+title: "XCMS processing of the untargeted metabolomics data from CHRIS"
 author: "Mar Garcia-Aloy, Johannes Rainer"
 output: 
   BiocStyle::html_document:
