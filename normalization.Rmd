@@ -366,7 +366,7 @@ dplc <- dplc[dplc$id %in% dplc$id[duplicated(dplc$id)], ]
 unique_id <- unique(dplc$id)
 
 diff_calculate <- function(x){
-  set.seed(123)
+  set.seed(myseed)
   dt <- imputeRowMinRand(
     x, method = "from_to",
     min_fraction = 1/2,
@@ -1204,7 +1204,7 @@ glbl_mdl_batch <- xcms:::fitModel(
   y ~ batch,
   data = as.data.frame(colData(res)[qcs, ]),
   y = log2(assay(res, "norm_nofill")[, qcs]),
-  method = "lm", minVals = 12)
+  method = "lm", minVals = 6)
 
 ## Next we adjust the data applying the models estimated on the QC samples.
 mdls_batch[is.na(mdls_batch)] <- list(glbl_mdl_batch)
@@ -1415,10 +1415,10 @@ influence on data quality.
 
 
 ```{r save}
-set.seed(123)
+set.seed(myseed)
 dt <- imputeRowMinRand(assay(res, "raw_filled") , method = "from_to",
                        min_fraction = 1/2, min_fraction_from = 1/1000)
-set.seed(123)
+set.seed(myseed)
 dt_norm <- imputeRowMinRand(assay(res, "norm_filled"), method = "from_to",
                             min_fraction = 1/2, min_fraction_from = 1/1000)
 
