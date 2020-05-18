@@ -283,7 +283,7 @@ xdata <- adjustRtime(xdata, param = pgp)
 The results from the alignment are shown below. 
 To visualize the alignment results, the BPC for the whole data set is plotted.
 
-```{r alignment-rtime-plot, eval = TRUE, fig.path = IMAGE_PATH, fig.width = 12, fig.height = 10, eval=FALSE}
+```{r alignment-rtime-plot, eval = TRUE, fig.path = IMAGE_PATH, fig.width = 12, fig.height = 10}
 #rts <- split(rtime(xdata), fromFile(xdata))
 #rt_ranges = lapply(rts, range)
 #rt_ranges_df <- do.call(rbind, rt_ranges)
