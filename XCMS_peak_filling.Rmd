@@ -24,7 +24,7 @@ We load all required libraries, and we set up the parallel processing.
 ## Parameters
 
 ```{r parameters}
-polarity <- "POS" # specify "POS" or "NEG"
+polarity <- "NEG" # specify "POS" or "NEG"
 ```
 
 ## Libraries
@@ -45,7 +45,7 @@ register(bpstart(MulticoreParam(ncores)))
 ## Data import
 
 ```{r}
-load(paste0("data/data_XCMS_", polarity,"_batch_n3.RData"))
+load(paste0("data/data_XCMS_", polarity,".RData"))
 ```
 
 
@@ -72,7 +72,7 @@ xdata <- fillChromPeaks(xdata, param = fcp)
 # Save data
 
 ```{r save, eval = TRUE}
-save(xdata, file = paste0("data/data_XCMS_filled_", polarity,"_batch_n3.RData"))
+save(xdata, file = paste0("data/data_XCMS_filled_", polarity,".RData"))
 ```
 
 
