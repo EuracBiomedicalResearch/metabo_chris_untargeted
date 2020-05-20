@@ -24,7 +24,7 @@ We load all required libraries, and we set up the parallel processing.
 ## Parameters
 
 ```{r parameters}
-polarity <- "NEG" # specify "POS" or "NEG"
+polarity <- "POS" # specify "POS" or "NEG"
 ```
 
 ## Libraries
