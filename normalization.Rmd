@@ -25,7 +25,7 @@ required libraries, and we set up the parallel processing.
 ## Parameters
 
 ```{r param, echo=TRUE}
-polarity <- "NEG" # specify "POS" or "NEG"
+polarity <- "POS" # specify "POS" or "NEG"
 myseed <- 589
 da <- 0.01
 
