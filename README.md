@@ -10,6 +10,11 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 
 ## Files and structure of the analysis
 
+The listing of all mzML files for CHRIS samples is provided in the
+*data/chris-files-annotated.xlsx* which is not included in this repository (it
+is available through the Eurac Research IfB-internal *massspec* repository; ask
+Johannes Rainer for access).
+
 ### Preprocessing
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak

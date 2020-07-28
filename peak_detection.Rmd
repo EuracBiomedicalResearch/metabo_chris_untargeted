@@ -229,7 +229,6 @@ peaks was identified in the first 4 batches, while the largest number of
 detected peaks are present in the last batches. In contrast to the number of
 peaks, the intensity of the detected peaks is comparable across all batches.
 
-
 ```{r neg-polarity}
 data_neg <- readMSData(files = paste0(MZML_PATH, pd_neg$mzML_file),
                        pdata = as(AnnotatedDataFrame(pd_neg),
