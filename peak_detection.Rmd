@@ -1,0 +1,263 @@
+---
+title: "XCMS processing of the untargeted metabolomics data from CHRIS"
+author: "Mar Garcia-Aloy, Johannes Rainer"
+output:
+  BiocStyle::html_document:
+    toc: true
+    number_sections: false
+    toc_float: true
+bibliography: references.bib
+csl: biomed-central.csl
+---
+
+```{r biocstyle, echo = FALSE, results = "asis" }
+library(BiocStyle)
+BiocStyle::markdown()
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+**Modified**: `r file.info("peak_detection.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r settings, echo = TRUE, results = "hide", message = FALSE}
+## Set general options
+options(useFancyQuotes = FALSE)
+set.seed(123)
+
+## Define paths:
+filename <- "peak_detection"
+## Path to save the images; remove all old images.
+IMAGE_PATH <- paste0("images/", filename, "/")
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
+## Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+exclusion <- c("041016_BLANK_POS_1",
+               "041016_BLANK_POS_2-041016_BLANK_POS_1",
+               "041016_BLANK_POS_2",
+               "041016_BLANK_POS_1 (3)",
+               "041016_BLANK_POS_1 (4)",
+               "06102032_BLANK_POS_b",
+               "251016_BLANK_POS_1",
+               "251016_BLANK_POS_2",
+               "20161025_BLANK_POS_a",
+               "20161025_BLANK_POS_b",
+               "211116_BLANK_POS_1",
+               "211116_BLANK_POS_2",
+               "051216_BLANK_POS_1",
+               "051216_BLANK_POS_2",
+               "20161205_BLANK_POS_a",
+               "20161205_BLANK_POS_b",
+               "20161205_BLANK_POS_a_R",
+               "20161205_BLANK_POS_a_R (2)",
+               "20161205_BLANK_POS_b_R",
+               "20161205_BLANK_POS_a_R1",
+               "090117_BLANK_POS_1",
+               "090117_BLANK_POS_2",
+               "20170112_BLANK_POS_a",
+               "20170112_BLANK_POS_b",
+               "120117_BLANK_POS_1",
+               "20170209_BLANK_POS_a",
+               "20170406_BLANK_POS_a",
+               "20170731_BLANK_POS (2)",
+
+               "06102016_0010060146_POS",
+               "20170615_0010282264_POS_R",
+
+               "20161116_POOL_POS_2",
+               "20170405_0010007645_POS",
+
+               "20170209_BLANK_NEG_a",
+               "20170209_BLANK_NEG_b",
+               "20170220_BLANK_NEG_a",
+               "20170220_BLANK_NEG_a (2)",
+               "20170224_BLANK_NEG_a",
+               "20170407_BLANK_NEG_a",
+               "20170731_BLANK_NEG",
+               "20170109_BLANK_NEG_a",
+               "20170111_BLANK_NEG_a",
+               "20170206_BLANK_NEG_a",
+               "20170207_BLANK_NEG_a",
+
+               "20161024_0010302963_NEG",
+               "20161201_POOL_NEG_1.mzML",
+               "20161201_POOL_NEG_2.mzML")
+
+## Get the number of cpus allocated or fall back to 3
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+
+rt_cut <- 340
+
+MZML_PATH <- "/data/massspec/mzML/"
+if (!dir.exists(MZML_PATH))
+    stop("Can not find the directory with the mzML files: ", MZML_PATH)
+
+```
+
+# Introduction
+
+In this document we perform the peak detection of the untargeted metabolomics
+data of the CHRIS population study, both for positive and negative polarity.
+
+We first load and define the phenodata table with all samples/mzML files which
+are part of the present data set.
+
+```{r libraries, message = FALSE}
+library(readxl)
+library(RColorBrewer)
+library(xcms)
+
+injections <- as.data.frame(read_xlsx("data/chris-files-annotated.xlsx"))
+injections$id <- gsub(".mzML", "", injections$mzML_file)
+injections <- injections[order(injections$timestamp), ]
+injections$batch <- injections$run_id
+injections <- injections[!injections$sample_name %in% exclusion, ]
+injections <- injections[!injections$type %in% c("ACN_IS", "EQ_MIX"), ]
+
+## Define the injection index
+runids <- split(injections$run_id,
+                f = factor(injections$run_id,
+                           levels = unique(injections$run_id)))
+injections$inj_idx <- unlist(lapply(lengths(runids), seq), use.names = FALSE)
+
+## split by polarity
+pd_pos <- injections[injections$polarity == "POS", ]
+pd_neg <- injections[injections$polarity == "NEG", ]
+```
+
+Performing first the analysis for the positive polarity data. Negative polarity
+data will be processed afterwards using the same settings. Below we load the
+positive polarity data, subset to the defined retention time range and remove
+unnecessary spectrum metadata.
+
+```{r pos-load}
+data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML_file),
+                       pdata = as(AnnotatedDataFrame(pd_pos),
+                                  "NAnnotatedDataFrame"),
+                       mode = "onDisk")
+
+data_pos <- filterRt(data_pos, c(0, rt_cut))
+data_pos <- selectFeatureData(
+    data_pos, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
+                       "msLevel", "precursorScanNum", "polarity", "centroided",
+                       "seqNum")
+)
+```
+
+# Peak detection and refinement
+
+We perform a centWave-based peak detection followed by a *peak refinement* step
+that aims at reducing the peak detection artifacts, such as split peaks or
+overlapping peaks. Below we define the parameters for the peak detection and
+subsequently perform the analysis.
+
+```{r pos-peak-detection, warning = FALSE, message = FALSE}
+cwp <- CentWaveParam(
+    peakwidth = c(2, 20),
+    ppm = 50,
+    snthresh = 5,
+    mzdiff = 0.001,
+    prefilter = c(3, 500),
+    noise = 100,
+    integrate = 2)
+
+register(MulticoreParam(ncores))
+system.time(
+    data_pos <- findChromPeaks(data_pos, param = cwp)
+)
+save(data_pos, file = paste0(RDATA_PATH, "data_pos.RData"))
+```
+
+Next we refine the identified chromatographic peaks.
+
+```{r pos-peak-refinement, warning = FALSE, message = FALSE}
+mnp <- MergeNeighboringPeaksParam(
+    expandRt = 2,
+    expandMz = 0.001,
+    ppm = 10,
+    minProp = 0.66)
+
+register(MulticoreParam(workers = ceiling(ncores * 2/3),
+                        timeout = 86400L))
+system.time(
+    data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
+)
+save(data_pos, file = paste0(RDATA_PATH, "data_pos_ref.RData"))
+```
+
+At last we evaluate the number of detected peaks per sample and plate as well as
+sample type.
+
+```{r pos-peaks-per-file, fig.path = IMAGE_PATH, caption = "Positive polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
+
+col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
+names(col_type) <- c("study", "QC", "BLANK")
+
+intos <- split(log2(chromPeaks(data_pos)[, "into"]),
+               f = as.integer(chromPeaks(data_pos)[, "sample"]))
+intos_mean <- lapply(intos, mean)
+
+pdf("peak_summary.pdf", width = 12, height = 8)
+
+par(mfrow = c(2, 1), mar = c(0.5, 4.5, 0.5, 0.5))
+barplot(lengths(intos), border = paste0(col_type[data_pos$type], 40),
+        ylab = "peak count", xaxt = "n", main = "positive polarity")
+boxplot(intos, outline = FALSE, medlty = 0, whisklty = 0, staplelty = 0,
+        border = paste0(col_type[data_pos$type], 40), ylim = c(10, 15),
+        xaxt = "n", ylab = expression(log[2]~intensity))
+points(x = seq_along(intos_mean), intos_mean,
+       col = paste0(col_type[data_pos$type], 80))
+
+year_month <- paste(data_pos$year, data_pos$month, sep = "-")
+is <- table(year_month)
+year_month_x <- c(1, cumsum(is))
+for (i in 2:length(year_month_x)) {
+    arrows(x0 = year_month_x[i - 1], x1 = year_month_x[i],
+           y0 = 14.5, y1 = 14.5, code = 3, angle = 90, length = 0.1)
+    text(x = mean(year_month_x[c(i - 1, i)]), y = 14.9,
+         label = names(year_month_x)[i])
+}
+
+dev.off()
+
+```
+
+While the number of detected peaks is comparable within batch (plate) a large
+differences can be observed between some batches. A comparably low number of
+peaks was identified in the first 4 batches, while the largest number of
+detected peaks are present in the last batches. In contrast to the number of
+peaks, the intensity of the detected peaks is comparable across all batches.
+
+
+```{r neg-polarity}
+data_neg <- readMSData(files = paste0(MZML_PATH, pd_neg$mzML_file),
+                       pdata = as(AnnotatedDataFrame(pd_neg),
+                                  "NAnnotatedDataFrame"),
+                       mode = "onDisk")
+
+data_neg <- filterRt(data_neg, c(0, rt_cut))
+data_neg <- selectFeatureData(
+    data_neg, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
+                       "msLevel", "precursorScanNum", "polarity", "centroided",
+                       "seqNum")
+)
+register(MulticoreParam(ncores))
+system.time(
+    data_neg <- findChromPeaks(data_neg, param = cwp)
+)
+save(data_neg, file = paste0(RDATA_PATH, "data_neg.RData"))
+## Peak refinement
+register(MulticoreParam(workers = ceiling(ncores * 2/3),
+                        timeout = 86400L))
+system.time(
+    data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
+)
+save(data_neg, file = paste0(RDATA_PATH, "data_neg_ref.RData"))
+```
+
+# Session information
+
+```{r}
+sessionInfo()
+```
