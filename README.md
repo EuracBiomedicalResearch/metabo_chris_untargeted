@@ -8,6 +8,19 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 - Mar Garcia-Aloy
 - Johannes Rainer
 
+## Requirements
+
+A recent version of R is required (>= 4.0) and the following R packages:
+
+```r
+install.packages("BiocManager")
+## For the peak_detection.Rmd
+BiocManager::install(c("BiocStyle",
+                       "readxl",
+                       "RColorBrewer",
+                       "xcms"))
+```
+
 ## Files and structure of the analysis
 
 The listing of all mzML files for CHRIS samples is provided in the
