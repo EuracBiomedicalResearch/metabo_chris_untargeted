@@ -179,8 +179,8 @@ mnp <- MergeNeighboringPeaksParam(
     ppm = 10,
     minProp = 0.66)
 
-register(MulticoreParam(workers = ceiling(ncores * 2/3),
-                        timeout = 86400L))
+## register(MulticoreParam(workers = ceiling(ncores * 2/3),
+##                         timeout = 86400L))
 tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
 )
@@ -242,14 +242,14 @@ data_neg <- selectFeatureData(
                        "msLevel", "precursorScanNum", "polarity", "centroided",
                        "seqNum")
 )
-register(MulticoreParam(ncores))
+## register(MulticoreParam(ncores))
 system.time(
     data_neg <- findChromPeaks(data_neg, param = cwp)
 )
 save(data_neg, file = paste0(RDATA_PATH, "data_neg.RData"))
 ## Peak refinement
-register(MulticoreParam(workers = ceiling(ncores * 2/3),
-                        timeout = 86400L))
+## register(MulticoreParam(workers = ceiling(ncores * 2/3),
+##                         timeout = 86400L))
 system.time(
     data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
 )
