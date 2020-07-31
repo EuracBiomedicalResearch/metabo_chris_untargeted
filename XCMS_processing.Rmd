@@ -61,8 +61,6 @@ exclusion <- c("041016_BLANK_POS_1",
                "20161116_POOL_POS_2",
                "20170405_0010007645_POS",
 
-
-
                "20170209_BLANK_NEG_a",
                "20170209_BLANK_NEG_b",
                "20170220_BLANK_NEG_a",
@@ -81,7 +79,7 @@ exclusion <- c("041016_BLANK_POS_1",
 rt_cut <- 340
 
 # DEFINE PATHS:
-RData_PATH <- "/data/massspec/RData/"
+RData_PATH <- "/data/massspec/RData2/"
 #RData_PATH <- "Y:/RData"
 dir.create("data/", recursive = TRUE, showWarnings = FALSE)
 
@@ -94,7 +92,6 @@ dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
 
 ```{r libraries, message = FALSE}
 library(readxl)
-library(doParallel)
 library(RColorBrewer)
 library(xcms)
 ```
@@ -113,25 +110,20 @@ register(bpstart(MulticoreParam(ncores)))
 
 ```{r data-import}
 #  Get filenames
-injections <- read_xlsx("data/chris-files-annotated.xlsx")
+injections <- as.data.frame(read_xlsx("data/chris-files-annotated.xlsx"))
 injections$id <- gsub(".mzML", "", injections$mzML_file)
 injections <- injections[order(injections$timestamp), ]
-injections$batch <- gsub(".*/", "", injections$mzML_file)
-injections$batch <- gsub("_.*", "", injections$batch)
+## injections$batch <- gsub(".*/", "", injections$mzML_file)
+## injections$batch <- gsub("_.*", "", injections$batch)
+injections$batch <- injections$run_id
 
-# Select samples:
-fls <- injections[injections$polarity == polarity, ]
-fls <- fls[fls$phospholipid_removal == TRUE, ]
-fls <- fls[!grepl(paste(exclusion, collapse="|"), fls$mzML_file), ]
-fls <- fls$mzML_file
-fls <- gsub(".mzML", ".RData", fls)
-fls <- fls[!grepl("20161116_POOL_POS_2", fls)]
-fls <- fls[!grepl("EQ_MIX", fls)] # remove samples from "equilibration mix"
-fls <- fls[!grepl("ACN_IS", fls)] # remove samples from "ACN_IS"
-fls <- fls[!grepl("EXTR_IS", fls)] # remove samples from "EXTR_IS"
-fls <- fls[!grepl("MS_IS", fls)] # remove samples from "MS_IS"
-fls <- fls[!grepl("TEST", fls)] # remove samples from "TEST"
+## Alternative approach: subset injections.
+injections <- injections[injections$polarity == polarity, ]
+injections <- injections[!injections$type %in% c("ACN_IS", "EQ_MIX"), ]
 
+injections <- injections[!injections$sample_name %in% exclusion, ]
+
+fls <- sub("mzML", "RData", injections$mzML_file)
 # number of peaks
 npeaks <- c()
 
@@ -140,14 +132,21 @@ load(paste0(RData_PATH, fls[1]))
 npeaks <- c(npeaks, nrow(chromPeaks(xdata)))
 data <- xdata
 
-for(i in 2:length(fls)){
-  load(paste0(RData_PATH, "/", fls[i]))
-  #xdata@processingData@files <- gsub("/data/massspec", "Y:", xdata@processingData@files)
-  npeaks <- c(npeaks, nrow(chromPeaks(xdata)))
-  data <- c(data, xdata)
-  #save.image("tmp.RData")
+system.time(
+for (i in 2:length(fls)) {
+    load(paste0(RData_PATH, fls[i]))
+    ## xdata@processingData@files <- gsub("/data/massspec", "Y:", xdata@processingData@files)
+    npeaks <- c(npeaks, nrow(chromPeaks(xdata)))
+    data <- c(data, xdata)
 }
-rm(i, xdata)
+)
+rm(xdata)
+
+## Alternative, load all and pass that to `c`.
+
+## Remove/cleanup the processHistory slot. No need to have x replicates there.
+
+## Re-add/fill with phenoData.
 
 tmp <- unique(data.frame(fromFile(data), polarity(data)))
 table(tmp$polarity.data.)

@@ -163,13 +163,14 @@ cwp <- CentWaveParam(
     integrate = 2)
 
 register(MulticoreParam(ncores))
-system.time(
+tm <- system.time(
     data_pos <- findChromPeaks(data_pos, param = cwp)
 )
 save(data_pos, file = paste0(RDATA_PATH, "data_pos.RData"))
 ```
 
-Next we refine the identified chromatographic peaks.
+Next we refine the identified chromatographic peaks. Processing took
+`r tm["elapsed"] * 60` minutes.
 
 ```{r pos-peak-refinement, warning = FALSE, message = FALSE}
 mnp <- MergeNeighboringPeaksParam(
@@ -180,14 +181,14 @@ mnp <- MergeNeighboringPeaksParam(
 
 register(MulticoreParam(workers = ceiling(ncores * 2/3),
                         timeout = 86400L))
-system.time(
+tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
 )
 save(data_pos, file = paste0(RDATA_PATH, "data_pos_ref.RData"))
 ```
 
-At last we evaluate the number of detected peaks per sample and plate as well as
-sample type.
+Processing took `r tm["elapsed"] * 60` minutes. At last we evaluate the number
+of detected peaks per sample and plate as well as sample type.
 
 ```{r pos-peaks-per-file, fig.path = IMAGE_PATH, caption = "Positive polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
@@ -198,7 +199,7 @@ intos <- split(log2(chromPeaks(data_pos)[, "into"]),
                f = as.integer(chromPeaks(data_pos)[, "sample"]))
 intos_mean <- lapply(intos, mean)
 
-pdf("peak_summary.pdf", width = 12, height = 8)
+## pdf("peak_summary.pdf", width = 12, height = 8)
 
 par(mfrow = c(2, 1), mar = c(0.5, 4.5, 0.5, 0.5))
 barplot(lengths(intos), border = paste0(col_type[data_pos$type], 40),
@@ -219,7 +220,7 @@ for (i in 2:length(year_month_x)) {
          label = names(year_month_x)[i])
 }
 
-dev.off()
+## dev.off()
 
 ```
 
@@ -254,6 +255,41 @@ system.time(
 )
 save(data_neg, file = paste0(RDATA_PATH, "data_neg_ref.RData"))
 ```
+
+```{r neg-peaks-per-file, fig.path = IMAGE_PATH, caption = "Negative polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
+
+col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
+names(col_type) <- c("study", "QC", "BLANK")
+
+intos <- split(log2(chromPeaks(data_neg)[, "into"]),
+               f = as.integer(chromPeaks(data_neg)[, "sample"]))
+intos_mean <- lapply(intos, mean)
+
+## pdf("peak_summary.pdf", width = 12, height = 8)
+
+par(mfrow = c(2, 1), mar = c(0.5, 4.5, 0.5, 0.5))
+barplot(lengths(intos), border = paste0(col_type[data_neg$type], 40),
+        ylab = "peak count", xaxt = "n", main = "negative polarity")
+boxplot(intos, outline = FALSE, medlty = 0, whisklty = 0, staplelty = 0,
+        border = paste0(col_type[data_neg$type], 40), ylim = c(10, 15),
+        xaxt = "n", ylab = expression(log[2]~intensity))
+points(x = seq_along(intos_mean), intos_mean,
+       col = paste0(col_type[data_neg$type], 80))
+
+year_month <- paste(data_neg$year, data_neg$month, sep = "-")
+is <- table(year_month)
+year_month_x <- c(1, cumsum(is))
+for (i in 2:length(year_month_x)) {
+    arrows(x0 = year_month_x[i - 1], x1 = year_month_x[i],
+           y0 = 14.5, y1 = 14.5, code = 3, angle = 90, length = 0.1)
+    text(x = mean(year_month_x[c(i - 1, i)]), y = 14.9,
+         label = names(year_month_x)[i])
+}
+
+## dev.off()
+
+```
+
 
 # Session information
 
