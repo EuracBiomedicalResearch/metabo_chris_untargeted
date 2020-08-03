@@ -131,7 +131,7 @@ data will be processed afterwards using the same settings. Below we load the
 positive polarity data, subset to the defined retention time range and remove
 unnecessary spectrum metadata.
 
-```{r pos-load}
+```{r pos-load, eval = !file.exists(paste0(RDATA_PATH, "data_pos.RData"))}
 data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML_file),
                        pdata = as(AnnotatedDataFrame(pd_pos),
                                   "NAnnotatedDataFrame"),
@@ -152,7 +152,7 @@ that aims at reducing the peak detection artifacts, such as split peaks or
 overlapping peaks. Below we define the parameters for the peak detection and
 subsequently perform the analysis.
 
-```{r pos-peak-detection, warning = FALSE, message = FALSE}
+```{r pos-peak-detection, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_pos.RData"))}
 cwp <- CentWaveParam(
     peakwidth = c(2, 20),
     ppm = 50,
@@ -169,10 +169,16 @@ tm <- system.time(
 save(data_pos, file = paste0(RDATA_PATH, "data_pos.RData"))
 ```
 
-Next we refine the identified chromatographic peaks. Processing took
-`r tm["elapsed"] * 60` minutes.
+```{r pos-peak-detection-load, echo = FALSE, warning = FALSE, message = FALSE}
+load(paste0(RDATA_PATH, "data_pos.RData"))
+if (!any(ls() == "tm"))
+    tm <- c(elapsed = 1)
+```
 
-```{r pos-peak-refinement, warning = FALSE, message = FALSE}
+Next we refine the identified chromatographic peaks. Processing took
+`r tm["elapsed"] / 60` minutes.
+
+```{r pos-peak-refinement, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_pos_ref.RData"))}
 mnp <- MergeNeighboringPeaksParam(
     expandRt = 2,
     expandMz = 0.001,
@@ -187,8 +193,56 @@ tm <- system.time(
 save(data_pos, file = paste0(RDATA_PATH, "data_pos_ref.RData"))
 ```
 
-Processing took `r tm["elapsed"] * 60` minutes. At last we evaluate the number
-of detected peaks per sample and plate as well as sample type.
+```{r pos-peak-refinement-load, echo = FALSE, warning = FALSE, message = FALSE}
+load(paste0(RDATA_PATH, "data_pos_ref.RData"))
+if (!any(ls() == "tm"))
+    tm <- c(elapsed = 1)
+```
+
+Processing took `r tm["elapsed"] / 60` minutes.
+
+```{r neg-polarity, echo = FALSE}
+if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
+    data_neg <- readMSData(files = paste0(MZML_PATH, pd_neg$mzML_file),
+                           pdata = as(AnnotatedDataFrame(pd_neg),
+                                      "NAnnotatedDataFrame"),
+                           mode = "onDisk")
+    data_neg <- filterRt(data_neg, c(0, rt_cut))
+    data_neg <- selectFeatureData(
+        data_neg, fcol = c("fileIdx", "spIdx", "acquisitionNum",
+                           "retentionTime", "msLevel", "precursorScanNum",
+                           "polarity", "centroided", "seqNum")
+    )
+    ## register(MulticoreParam(ncores))
+    system.time(
+        data_neg <- findChromPeaks(data_neg, param = cwp)
+    )
+    save(data_neg, file = paste0(RDATA_PATH, "data_neg.RData"))
+} else load(paste0(RDATA_PATH, "data_neg.RData"))
+
+if (!file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))) {
+    ## Peak refinement
+    ## register(MulticoreParam(workers = ceiling(ncores * 2/3),
+    ##                         timeout = 86400L))
+    tm <- system.time(
+        data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
+    )
+    save(data_neg, file = paste0(RDATA_PATH, "data_neg_ref.RData"))
+} else {
+    load(paste0(RDATA_PATH, "data_neg_ref.RData"))
+}
+```
+
+
+# Initial quality assessment
+
+In this section we perform an initial quality assessment comparing the base peak
+chromatograms of QC samples and the number of identified chromatographic peaks
+across the whole data set.
+
+- get BPC of all samples.
+- plot BPC of QC samples.
+- compare BPC distribution of QC samples.
 
 ```{r pos-peaks-per-file, fig.path = IMAGE_PATH, caption = "Positive polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
@@ -230,31 +284,6 @@ peaks was identified in the first 4 batches, while the largest number of
 detected peaks are present in the last batches. In contrast to the number of
 peaks, the intensity of the detected peaks is comparable across all batches.
 
-```{r neg-polarity}
-data_neg <- readMSData(files = paste0(MZML_PATH, pd_neg$mzML_file),
-                       pdata = as(AnnotatedDataFrame(pd_neg),
-                                  "NAnnotatedDataFrame"),
-                       mode = "onDisk")
-
-data_neg <- filterRt(data_neg, c(0, rt_cut))
-data_neg <- selectFeatureData(
-    data_neg, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
-                       "msLevel", "precursorScanNum", "polarity", "centroided",
-                       "seqNum")
-)
-## register(MulticoreParam(ncores))
-system.time(
-    data_neg <- findChromPeaks(data_neg, param = cwp)
-)
-save(data_neg, file = paste0(RDATA_PATH, "data_neg.RData"))
-## Peak refinement
-## register(MulticoreParam(workers = ceiling(ncores * 2/3),
-##                         timeout = 86400L))
-system.time(
-    data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
-)
-save(data_neg, file = paste0(RDATA_PATH, "data_neg_ref.RData"))
-```
 
 ```{r neg-peaks-per-file, fig.path = IMAGE_PATH, caption = "Negative polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
