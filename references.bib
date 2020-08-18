@@ -1,0 +1,185 @@
+@article{DeLivera:2012bw,
+author = {De Livera, Alysha M and Dias, Daniel A and De Souza, David and Rupasinghe, Thusitha and Pyke, James and Tull, Dedreia and Roessner, Ute and McConville, Malcolm and Speed, Terence P},
+title = {{Normalizing and integrating metabolomics data.}},
+journal = {Analytical chemistry},
+year = {2012},
+volume = {84},
+number = {24},
+pages = {10768--10776},
+month = dec,
+annote = {- Don't use internal standards for normalization.}
+}
+
+@article{Tautenhahn:2008fx,
+author = {Tautenhahn, Ralf and B{\"o}ttcher, Christoph and Neumann, Steffen},
+title = {{Highly sensitive feature detection for high resolution LC/MS.}},
+journal = {BMC Bioinformatics},
+year = {2008},
+volume = {9},
+number = {1},
+pages = {504},
+annote = {* The centWave paper.}
+}
+
+@article{Koller:2017js,
+author = {Koller, Manuel and Stahel, Werner A.},
+title = {{Nonsingular subsampling for regression S~estimators with categorical predictors}},
+journal = {Computational Statistics},
+year = {2017},
+volume = {32},
+number = {2},
+pages = {631--646},
+month = jun
+}
+
+@article{Wehrens:2016ie,
+author = {Wehrens, Ron and Hageman, Jos A and van Eeuwijk, Fred and Kooke, Rik and Flood, P{\'a}draic J and Wijnker, Erik and Keurentjes, Joost J B and Lommen, Arjen and van Eekelen, Henri{\"e}tte D L M and Hall, Robert D and Mumm, Roland and de Vos, Ric C H},
+title = {{Improved batch correction in untargeted MS-based metabolomics.}},
+journal = {Metabolomics : Official journal of the Metabolomic Society},
+year = {2016},
+volume = {12},
+number = {5},
+pages = {88},
+annote = {Seem to apply the injection order normalization on log scale -> imply log-linear relationship.
+}
+}
+
+@article{Livera:2015bo,
+author = {Livera, Alysha M De and Sysi-Aho, Marko and Jacob, Laurent and Gagnon-Bartsch, Johann A and Castillo, Sandra and Simpson, Julie A and Speed, Terence P},
+title = {{Statistical methods for handling unwanted variation in metabolomics data.}},
+journal = {Analytical chemistry},
+year = {2015},
+volume = {87},
+number = {7},
+pages = {3606--3615},
+month = apr,
+annote = {Experimental design: 
++ Use quality control samples (same sample run repeatedly to remove batch effects/drifts).
++ Use multiple internal standards not a single one (e.g. 5).
++ Estimate quality conytol metabolites from within the sample: those that have high correlation with the internal standarda.}
+}
+
+@article{Wang:2013fe,
+author = {Wang, San-Yuan and Kuo, Ching-Hua and Tseng, Yufeng J},
+title = {{Batch Normalizer: a fast total abundance regression calibration method to simultaneously adjust batch and injection order effects in liquid chromatography/time-of-flight mass spectrometry-based metabolomics data and comparison with current calibration methods.}},
+journal = {Analytical chemistry},
+year = {2013},
+volume = {85},
+number = {2},
+pages = {1037--1046},
+month = jan
+}
+
+@article{Dunn:2011bq,
+author = {Dunn, Warwick B and Broadhurst, David and Begley, Paul and Zelena, Eva and Francis-McIntyre, Sue and Anderson, Nadine and Brown, Marie and Knowles, Joshau D and Halsall, Antony and Haselden, John N and Nicholls, Andrew W and Wilson, Ian D and Kell, Douglas B and Goodacre, Royston and {Human Serum Metabolome (HUSERMET) Consortium}},
+title = {{Procedures for large-scale metabolic profiling of serum and plasma using gas chromatography and liquid chromatography coupled to mass spectrometry.}},
+journal = {Nature Protocols},
+year = {2011},
+volume = {6},
+number = {7},
+pages = {1060--1083},
+month = jul
+}
+
+@article{Anders:2010fu,
+author = {Anders, Simon and Huber, Wolfgang},
+title = {{Differential expression analysis for sequence count data.}},
+journal = {Genome Biology},
+year = {2010},
+volume = {11},
+number = {10},
+pages = {R106}
+}
+
+@article{Robinson:2010dd,
+author = {Robinson, Mark D and Oshlack, Alicia},
+title = {{A scaling normalization method for differential expression analysis of RNA-seq data.}},
+journal = {Genome Biology},
+year = {2010},
+volume = {11},
+number = {3},
+pages = {R25},
+}
+
+@article{SysiAho:2007bt,
+author = {Sysi-Aho, Marko and Katajamaa, Mikko and Yetukuri, Laxman and Oresic, Matej},
+title = {{Normalization method for metabolomics data using optimal selection of multiple internal standards.}},
+journal = {BMC Bioinformatics},
+year = {2007},
+volume = {8},
+number = {1},
+pages = {93},
+month = mar,
+publisher = {BioMed Central},
+affiliation = {VTT Technical Research Centre of Finland, Tietotie 2, FIN-02044 VTT, Espoo, Finland. marko.sysi-aho@vtt.fi <marko.sysi-aho@vtt.fi>},
+doi = {10.1186/1471-2105-8-93},
+pmid = {17362505},
+pmcid = {PMC1838434},
+language = {English},
+read = {Yes},
+rating = {0},
+date-added = {2017-12-05T07:28:41GMT},
+date-modified = {2018-09-27T11:46:56GMT},
+abstract = {BACKGROUND:Success of metabolomics as the phenotyping platform largely depends on its ability to detect various sources of biological variability. Removal of platform-specific sources of variability such as systematic error is therefore one of the foremost priorities in data preprocessing. However, chemical diversity of molecular species included in typical metabolic profiling experiments leads to different responses to variations in experimental conditions, making normalization a very demanding task.
+
+RESULTS:With the aim to remove unwanted systematic variation, we present an approach that utilizes variability information from multiple internal standard compounds to find optimal normalization factor for each individual molecular species detected by metabolomics approach (NOMIS). We demonstrate the method on mouse liver lipidomic profiles using Ultra Performance Liquid Chromatography coupled to high resolution mass spectrometry, and compare its performance to two commonly utilized normalization methods: normalization by l2 norm and by retention time region specific standard compound profiles. The NOMIS method proved superior in its ability to reduce the effect of systematic error across the full spectrum of metabolite peaks. We also demonstrate that the method can be used to select best combinations of standard compounds for normalization.
+
+CONCLUSION:Depending on experiment design and biological matrix, the NOMIS method is applicable either as a one-step normalization method or as a two-step method where the normalization parameters, influenced by variabilities of internal standard compounds and their correlation to metabolites, are first calculated from a study conducted in repeatability conditions. The method can also be used in analytical development of metabolomics methods by helping to select best combinations of standard compounds for a particular biological matrix and analytical platform.},
+url = {http://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-8-93},
+local-url = {file://localhost/Users/jo/ownCloud/Papers/Library.papers3/2007/BMC_Bioinformatics/Sysi-Aho/BMC_Bioinformatics_2007_Sysi-Aho.pdf},
+file = {{BMC_Bioinformatics_2007_Sysi-Aho.pdf:/Users/jo/ownCloud/Papers/Library.papers3/2007/BMC_Bioinformatics/Sysi-Aho/BMC_Bioinformatics_2007_Sysi-Aho.pdf:application/pdf}},
+uri = {\url{papers3://publication/doi/10.1186/1471-2105-8-93}}
+}
+
+@article{Koller:2017jsa,
+author = {Koller, Manuel and Stahel, Werner A.},
+title = {{Nonsingular subsampling for regression S~estimators with categorical predictors}},
+journal = {Computational Statistics},
+year = {2017},
+volume = {32},
+number = {2},
+pages = {631--646},
+month = jun,
+publisher = {Springer Berlin Heidelberg},
+affiliation = {Institut fur Sozial- und Praventivmedizin, Geneve, Switzerland},
+doi = {10.1007/s00180-016-0679-x},
+language = {English},
+rating = {0},
+date-added = {2018-03-07T12:57:00GMT},
+date-modified = {2018-09-27T05:53:29GMT},
+abstract = {{\textcopyright} 2016, Springer-Verlag Berlin Heidelberg. Simple random subsampling is an integral part of S~estimation algorithms for linear regression. Subsamples are required to be nonsingular. Usually, discarding a singular subsample and drawing a new one leads to a sufficient number of nonsingular subsamples with a reasonable computational effort. However, this procedure can require so many subsamples that it becomes infeasible, especially if levels of categorical variables have low frequency. A subsampling algorithm called nonsingular subsampling is presented, which generates only nonsingular subsamples. When no singular subsamples occur, nonsingular subsampling is as fast as the simple algorithm, and if singular subsamples do occur, it maintains the same computational order. The algorithm works consistently, unless the full design matrix is singular. The method is based on a modified LU decomposition algorithm that combines sample generation with solving the least squares problem. The algorithm may also be useful for ordinary bootstrapping. Since the method allows for S~estimation in designs with factors and interactions between factors and continuous regressors, we study properties of the resulting estimators, both in the sense of their dependence on the randomness of the sampling and of their statistical performance.},
+url = {http://link.springer.com/10.1007/s00180-016-0679-x},
+uri = {\url{papers3://publication/doi/10.1007/s00180-016-0679-x}}
+}
+
+@article{Benjamini:1995ws,
+author = {Benjamini, Yoav and Hochberg, Yosef},
+title = {{Controlling the false discovery rate: a practical and powerful approach to multiple testing}},
+journal = {Journal of the Royal Statistical Society. Series B. Methodological},
+year = {1995},
+volume = {57},
+number = {1},
+pages = {289--300},
+rating = {0},
+date-added = {2010-07-13T09:10:45GMT},
+date-modified = {2019-05-20T14:15:21GMT},
+url = {http://www.ams.org/mathscinet/search/publications.html?pg1=MR&s1=MR1325392},
+local-url = {file://localhost/Users/jo/ownCloud/Papers/Library.papers3/1995/Journal_of_the_Royal_Statistical_Society._Series_B._Methodological/Benjamini/J._Roy._Statist._Soc._Ser._B_1995_Benjamini.pdf},
+file = {{J._Roy._Statist._Soc._Ser._B_1995_Benjamini.pdf:/Users/jo/ownCloud/Papers/Library.papers3/1995/Journal_of_the_Royal_Statistical_Society._Series_B._Methodological/Benjamini/J._Roy._Statist._Soc._Ser._B_1995_Benjamini.pdf:application/pdf}},
+uri = {\url{papers3://publication/uuid/366231D9-4890-4639-8629-F53240E687F6}}
+}
+
+@article{Smyth:2004to,
+author = {Smyth, G},
+title = {{Linear Models and Empirical Bayes Methods for Assessing Differential Expression in Microarray {\ldots}}},
+journal = {Statistical Applications in Genetics and Molecular Biology},
+year = {2004},
+rating = {0},
+date-added = {2009-01-05T08:26:04GMT},
+date-modified = {2018-09-27T06:22:36GMT},
+url = {http://www.statsci.org/smyth/pubs/ebayes.pdf},
+local-url = {file://localhost/Users/jo/ownCloud/Papers/Library.papers3/2004/Statistical_Applications_in_Genetics_and_Molecular_Biology/Smyth/Statistical_Applications_in_Genetics_and_Molecular_Biology_2004_Smyth.pdf},
+file = {{Statistical_Applications_in_Genetics_and_Molecular_Biology_2004_Smyth.pdf:/Users/jo/ownCloud/Papers/Library.papers3/2004/Statistical_Applications_in_Genetics_and_Molecular_Biology/Smyth/Statistical_Applications_in_Genetics_and_Molecular_Biology_2004_Smyth.pdf:application/pdf}},
+uri = {\url{papers3://publication/uuid/EFAD1B6A-EFC6-4DF9-85B1-16B3ABFE6FAB}}
+}
+
