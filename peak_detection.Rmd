@@ -391,10 +391,74 @@ peaks, the intensity of the detected peaks is comparable across all batches.
 - compare BPC of plates with and without phospholipid removal.
 - create EICs of standards.
 
+Next we create the same plots for negative polarity.
 
-NEGATIVE BELOW
+```{r bpc-neg, eval = !file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))}
+bpc_neg <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "max")
+save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
+```
 
+```{r bpc-neg-load, echo = FALSE}
+load(paste0(RDATA_PATH, "bpc_neg.RData"))
+```
 
+Next we plot the base peak chromatogram for all QC samples in the data set.
+
+```{r neg-bpc-qc, fig.path = IMAGE_PATH, caption = "BPC of QC samples. Negative polarity", fig.width = 16, fig.height = 8, echo = FALSE}
+## pdf("neg-bpc-qc.pdf", width = 16, height = 8)
+plot(bpc_neg[, bpc_neg$type == "QC"], main = "QC samples, negative polarity",
+     col = "#00000020")
+## dev.off()
+```
+
+Because of the large number of samples being plotted it is hard to see
+differences between the BPC. As expected from such a large data set, retention
+time shifts seem to be present. Next we compare the distribution of base peak
+intensities of all QC samples in the data set.
+
+```{r neg-bpc-qc-boxplot, echo = FALSE, fig.cap = "Distribution of base peak intensities of QC samples.", fig.width = 16, fig.height = 8}
+## pdf("neg-bpc-qc-boxplot.pdf", width = 16, height = 8)
+tmp <- bpc_neg[, bpc_neg$type == "QC"]
+par(mar = c(5, 4.5, 1.5, 0.5))
+boxplot(lapply(tmp, function(z) log2(intensity(z))), outline = FALSE,
+        ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
+        main = "QC samples, negative polarity")
+batch_idx <- as.integer(factor(tmp$batch, levels = unique(tmp$batch)))
+batch_tick <- c(1, which(diff(batch_idx) == 1), ncol(tmp))
+axis(side = 1, at = batch_tick, labels = rep("", length(batch_tick)))
+axis(side = 1, at = batch_tick[-length(batch_tick)] + diff(batch_tick) / 2,
+     labels = unique(tmp$batch), las = 2, tick = 0, line = -0.8)
+## dev.off()
+
+```
+
+We also create base peak chromatograms separately for each plate (code and plots
+not shown here).
+
+```{r neg-bpc-plate, echo = FALSE}
+col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
+names(col_type) <- c("study", "QC", "BLANK")
+batches <- unique(bpc_neg$batch)
+dr <- paste0(IMAGE_PATH, "neg-per-batch/")
+dir.create(dr, showWarnings = FALSE, recursive = TRUE)
+for (batch in batches) {
+    tmp <- bpc_neg[, bpc_neg$batch == batch]
+    png(paste0(dr, "BPC-chromatogram-", batch, ".png"), width = 16, height = 8,
+        units = "cm", res = 300, pointsize = 5)
+    plot(tmp, col = paste0(col_type[as.character(tmp$type)], 60),
+         main = paste0(batch, ": ", tmp$year[1], "-",
+                       tmp$month[1], "-", tmp$day[1]))
+    dev.off()
+    png(paste0(dr, "BPC-boxplot-", batch, ".png"), width = 16, height = 8,
+        units = "cm", res = 300, pointsize = 5)
+    boxplot(lapply(tmp, function(z) log2(intensity(z))), outline = FALSE,
+            col = paste0(col_type[as.character(tmp$type)], 60),
+            ylab = expression(log[2]~base~peak~intensity), las = 2,
+            main = paste0(batch, ": ", tmp$year[1], "-",
+                          tmp$month[1], "-", tmp$day[1]))
+    dev.off()
+}
+```
 
 ```{r neg-peaks-per-file, fig.path = IMAGE_PATH, caption = "Negative polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
