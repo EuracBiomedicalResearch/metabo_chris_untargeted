@@ -8,19 +8,46 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 - Mar Garcia-Aloy
 - Johannes Rainer
 
+## Requirements
+
+A recent version of R is required (>= 4.0) and the following R packages:
+
+```r
+install.packages("BiocManager")
+## For the peak_detection.Rmd
+BiocManager::install(c("BiocStyle",
+                       "readxl",
+                       "RColorBrewer",
+                       "xcms"))
+```
+
 ## Files and structure of the analysis
+
+The listing of all mzML files for CHRIS samples is provided in the
+*data/chris-files-annotated.xlsx* which is not included in this repository (it
+is available through the Eurac Research IfB-internal *massspec* repository; ask
+Johannes Rainer for access).
 
 ### Preprocessing
 
+- [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
+  post-processing of both positive and negative polarity data.
+- [peak_detection_2020.Rmd](peak_detection_2020.Rmd): peak detection and peak
+  post-processing of CHRIS samples measured in 2020. Ultimately (once all
+  samples are measured), these files and samples will be integrated into the
+  *peak_detection.Rmd* file.
+
+
+Previous files:
 - [XCMS_processing.Rmd](XCMS_processing.Rmd): alignment (retention
-  time correction) and correspondence (grouping of peaks across samples) 
+  time correction) and correspondence (grouping of peaks across samples)
   of the data for 1 specific polarity.
-- [XCMS_peak_filling.Rmd](XCMS_peak_filling.Rmd): peak filling of data for 1 specific polarity.  
+- [XCMS_peak_filling.Rmd](XCMS_peak_filling.Rmd): peak filling of data for 1 specific polarity.
 
 ### Normalization
 
-- [normalization.Rmd](normalization.Rmd): implementation of various data 
-normalisation approaches (between-sample, within-batch and between-batch) for 1 specific polarity.  
+- [normalization.Rmd](normalization.Rmd): implementation of various data
+normalisation approaches (between-sample, within-batch and between-batch) for 1 specific polarity.
 
 ## Required packages and setup
 
