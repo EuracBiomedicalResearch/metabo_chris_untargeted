@@ -934,7 +934,7 @@ The first standard is *Sphingosine*. As we can see in the plot below, the
 intensities measured in September 2020 are much lower (compared to the median
 intensity of all standards) than in all other batches.
 
-![](images/selected-standards/Sphingosine.png)
+![](images/random_QC_samples/selected-standards/Sphingosine.png)
 
 We next calculate m/z values for all potential adducts of the compound and
 filter the full scan to only contain these.
@@ -978,6 +978,12 @@ analyzed. This can also not be explained by a strong retention time shift in
 these samples, since no other peak is present for that m/z from 10 to 50 seconds
 (in any sample).
 
+```{r eval = FALSE, echo = FALSE}
+plotSpectraMirror(sps[14], sps[15])
+abline(v = std_info$mz_ion[i], lty = 3, col = "#ff000080")
+## There's no other large signal for 15, so it can not be ion suppression.
+```
+
 At last we calculate also the pairwise similarity of all ion spectra with each
 other and cluster them.
 
@@ -997,7 +1003,7 @@ have a different ion spectrum compared to all other samples.
 Next we evaluate the signal for *Inosine*. This standard yields lower
 intensities in the second batch from February 2020 (see below).
 
-![](images/selected-standards/Inosine.png)
+![](images/random_QC_samples/selected-standards/Inosine.png)
 
 ```{r}
 i <- which(std_info$name == "Inosine")
@@ -1042,6 +1048,15 @@ tmp <- data_pos %>%
     filterMz(c(290.02, 292.09))
 plot(tmp, type = "XIC")
 abline(h = std_info$mz_ion[i], lty = 2)
+
+## data_prof <- readMSData(dir("/data/massspec/mzML/profile/2020",
+##                             full.names = TRUE, recursive = TRUE),
+##                         mode = "onDisk")
+## tmp <- data_prof %>%
+##     filterRt(c(135, 155 )) %>%
+##     filterMz(c(291.0, 291.1))
+## plot(tmp, type = "XIC", col = NA)
+## abline(h = std_info$mz_ion[i], lty = 2)
 ```
 
 And the same for sample 14
@@ -1057,7 +1072,8 @@ plot(tmp, type = "XIC")
 abline(h = std_info$mz_ion[i], lty = 2)
 ```
 
-ion suppression? does the co-eluting signal interfere?
+ion suppression? does the co-eluting signal interfere? Note that also profile
+mode data looks the same.
 - m/z of salt clusters?
 
 
@@ -1067,7 +1083,7 @@ Summary: no clear hint for a batch-specific ion formation.
 TODO:
 - for each standard: find all chrom peaks potentially matching an ion and sum up
   that intensities: are these values more reproducible?
-
+- check some internal standards.
 
 # Session information
 
