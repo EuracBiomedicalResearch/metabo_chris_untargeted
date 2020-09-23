@@ -38,7 +38,7 @@ ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
 
 rt_cut <- 340
 
-MZML_PATH <- "/data/massspec/mzML/"
+MZML_PATH <- "/mzML/"
 if (!dir.exists(MZML_PATH))
     stop("Can not find the directory with the mzML files: ", MZML_PATH)
 
@@ -48,11 +48,8 @@ if (!dir.exists(MZML_PATH))
 
 After the Covid-19 caused lockdown the LC-MS system seemed to no longer generate
 reproducible data. In this document we evaluate the signal measured for QC
-samples in September 2020 (after thorough revision and cleaning but prior
-maintenance of the LC-MS system) and compare that signal to the data of random
-QC samples measured in the year 2017. In particular, we aim at comparing the TIC
-and BPC of all samples and evaluate the retention time and integrated peak
-signal for selected ions.
+samples across all data acquired so far, from Oct/2016 to Sep/2020. In particular, we aim at comparing the TIC and BPC of all QC samples and evaluate the retention time and integrated peak
+signal for selected ions (including IS and endogenous metabolites).
 
 
 ```{r libraries, message = FALSE}
