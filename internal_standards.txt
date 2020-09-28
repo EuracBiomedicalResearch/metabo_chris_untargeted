@@ -1,0 +1,14 @@
+name	abbreviation	formula	POS	NEG	RT	data_set	sample	operator	version	quality_NEG	quality_POS
+"L-Alanine (13C3, 99%; 15N, 99%)"	alanine_13C_15N	C3H11NO2	[M+H]+	[M-H]-	167	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	2_medium	1_good
+"L-Arginine HCl (13C6, 99%; 15N4, 99%)"	arginine_13C_15N	C6H24N4O2	[M+H]+	[M-H]-	183	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	0_perfect	0_perfect
+"L-Aspartic acid (13C4, 99%; 15N, 99%)"	aspartic_13C_15N	C4H12NO4	[M+H]+	[M-H]-	179	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	1_good
+"L-Cystine (13C6, 99%; 15N2, 99%)"	cystine_13C_15N	C6H20N2O4S2	[M+H]+	[M-H]-	209	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	0_perfect	0_perfect
+"L-Glutamic acid (13C5, 99%; 15N, 99%)"	glutamic_13C_15N	C5H15NO4	[M+H]+	[M-H]-	171	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	0_perfect	0_perfect
+"Glycine (13C2, 99%; 15N, 99%)"	glycine_13C_15N	C2H8NO2	[M+H]+	NA	168	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	3_bad	1_good
+"L-Histidine HCl H2O (13C6; 15N3, 99%)"	histidine_13C_15N	C6H18N3O2	[M+H]+	[M-H]-	185	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	0_perfect	0_perfect
+"L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"	lysine_13C_15N	C6H22N2O2	[M+H]+	[M-H]-	184	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	0_perfect
+"L-Methionine (13C5, 99%; 15N, 99%)"	methionine_13C_15N	C5H17NO2S	[M+H]+	[M-H]-	161	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	1_good
+"L-Serine (13C3, 99%; 15N, 99%)"	serine_13C_15N	C3H11NO3	[M+H]+	[M-H]-	178	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	0_perfect
+"L-Threonine (13C4, 99%; 15N, 99%)"	threonine_13C_15N	C4H14NO3	[M+H]+	[M-H]-	171	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	0_perfect	0_perfect
+"L-Tyrosine (13C9, 99%; 15N, 99%)"	tyrosine_13C_15N	C9H21NO3	[M+H]+	[M-H]-	166	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	1_good
+"L-Valine (13C5, 99%; 15N, 99%)"	valine_13C_15N	C5H17NO2	[M+H]+	[M-H]-	164	2019_11_matrix_effect	serum	Mar Garcia-Aloy	2	1_good	1_good

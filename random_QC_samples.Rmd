@@ -38,7 +38,7 @@ ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
 
 rt_cut <- 340
 
-MZML_PATH <- "/mzML/"
+MZML_PATH <- "mzML/"
 if (!dir.exists(MZML_PATH))
     stop("Can not find the directory with the mzML files: ", MZML_PATH)
 
@@ -59,21 +59,15 @@ library(xcms)
 library(CompMetaboTools)
 library(Spectra)
 
-injections <- as.data.frame(read_xlsx("data/random-QC-2017-2020_09.xlsx"))
-injections$id <- gsub(".mzML", "", injections$mzML_file)
-injections <- injections[order(injections$timestamp), ]
-injections$batch <- injections$run_id
-injections <- injections[!injections$type %in% c("ACN_IS", "EQ_MIX"), ]
-
-## split by polarity
-pd_pos <- injections[injections$polarity == "POS", ]
+injections <- as.data.frame(read_xlsx("QC-2016-2020_09.xlsx"))
+pd_pos <- injections
 ```
 
 Below we load the positive polarity data, subset to the defined retention time
 range and remove unnecessary spectrum metadata.
 
 ```{r pos-load, eval = !file.exists(paste0(RDATA_PATH, "data_pos.RData"))}
-data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML_file),
+data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML),
                        pdata = as(AnnotatedDataFrame(pd_pos),
                                   "NAnnotatedDataFrame"),
                        mode = "onDisk")
@@ -149,23 +143,21 @@ Processing took `r tm["elapsed"] / 60` minutes.
 Next we extract the base peak and total ion chromatogram.
 
 ```{r chrs}
-data_pos$year_month <- paste0(data_pos$year, "-", data_pos$month)
 bpchr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "max")
 tichr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
 ```
 
 Below we plot the BPC and the TIC for the data set.
 
-
 ```{r chr-plots, fig.path = IMAGE_PATH, caption = "BPC and TIC of the data set", fig.width = 12, fig.height = 10, echo = FALSE}
-col_year_month <- brewer.pal(8, "Set1")[-6]
+col_year_month <- brewer.pal(3, "Set1")[-3]
 names(col_year_month) <- unique(data_pos$year_month)
 par(mfrow = c(2, 1), mar = c(2, 4.5, 2, 1))
-plot(bpchr, col = paste0(col_year_month[bpchr$year_month], 80), main = "BPC",
+plot(bpchr, col = paste0(col_year_month[as.character(bpchr$year_month)], 80), main = "BPC",
      xlim = c(0, 220))
 grid()
 legend("topright", legend = names(col_year_month), lty = 1, col = col_year_month)
-plot(tichr, col = paste0(col_year_month[tichr$year_month], 80), main = "TIC",
+plot(tichr, col = paste0(col_year_month[as.character(tichr$year_month)], 80), main = "TIC",
      xlim = c(0, 220))
 grid()
 ```
@@ -182,12 +174,12 @@ par(mfrow = c(2, 1), mar = c(1, 4.5, 1, 1))
 boxplot(lapply(bpchr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
         main = "QC samples, positive polarity",
-        col = paste0(col_year_month[bpchr$year_month], 40))
+        col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 boxplot(lapply(tichr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~total~ion~intensity), xaxt = "n",
         main = "QC samples, positive polarity",
-        col = paste0(col_year_month[tichr$year_month], 40))
+        col = paste0(col_year_month[as.character(tichr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 ```
 
@@ -225,8 +217,9 @@ retention time and ion for the set of standards.
 ```{r standards}
 library(CompoundDb)
 library(Rdisop)
-std_info <- read.table(
-    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
+std_info <- read.table("C:/Users/vveri/Documents/GitHub/lcms-standards/data/internal_standards.txt",
+   
+  # "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
     ## "data/standards_dilution.txt",
     sep = "\t", header = TRUE, as.is = TRUE)
 std_info <- std_info[!is.na(std_info[, "POS"]), ]

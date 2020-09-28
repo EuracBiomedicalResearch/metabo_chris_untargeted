@@ -1,0 +1,14 @@
+mix	name	abbreviation	HMDB.code	formula	POS	NEG	RT	data_set	sample	operator	version	quality_POS	quality_NEG
+1	"Glycine (13C2, 99%; 15N, 99%)"	Glycine 		C2H8NO2	[M+H]+	[M-H]-	165		serum				
+1	"L-Alanine (13C3, 99%; 15N, 99%)"	Alanine 		C3H11NO2	[M+H]+	[M-H]-	155.4		serum				
+1	"L-Arginine·HCl (13C6, 99%; 15N4, 99%)"	Arginine·HCl 		C6H24N4O2	[M+H]+	[M-H]-	186		serum				
+1	"L-Aspartic acid (13C4, 99%; 15N, 99%)"	Aspartic acid 		C4H12NO4	[M+H]+	[M-H]-	175.8		serum				
+1	"L-Cystine (13C6, 99%; 15N2, 99%)"	Cystine 		C6H20N2O4S2	[M+H]+	[M-H]-	208.8		serum				
+1	"L-Glutamic acid (13C5, 99%; 15N, 99%)"	Glutamic acid 		C5H15NO4	[M+H]+	[M-H]-	169.8		serum				
+1	"L-Histidine·HCl·H2O (13C6; 15N3, 99%)"	Histidine·HCl·H2O 		C6H18N3O2	[M+H]+	[M-H]-	188.4		serum				
+1	"L-Lysine·2HCl (13C6, 99%; 15N2, 99%)"	Lysine·2HCl 		C6H22N2O2	[M+H]+	[M-H]-	187.8		serum				
+1	"L-Methionine (13C5, 99%; 15N, 99%)"	Methionine 		C5H17NO2S	[M+H]+	[M-H]-	144.6		serum				
+1	"L-Serine (13C3, 99%; 15N, 99%)"	Serine 		C3H11NO3	[M+H]+	[M-H]-	176.4		serum				
+1	"L-Threonine (13C4, 99%; 15N, 99%)"	Threonine 		C4H14NO3	[M+H]+	[M-H]-	169.2		serum				
+1	"L-Tyrosine (13C9, 99%; 15N, 99%)"	Tyrosine 		C9H21NO3	[M+H]+	[M-H]-	152.4		serum				
+1	"L-Valine (13C5, 99%; 15N, 99%)"	Valine 		C5H17NO2	[M+H]+	[M-H]-	140.4		serum				
