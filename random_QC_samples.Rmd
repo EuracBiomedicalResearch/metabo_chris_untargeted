@@ -48,8 +48,10 @@ if (!dir.exists(MZML_PATH))
 
 After the Covid-19 caused lockdown the LC-MS system seemed to no longer generate
 reproducible data. In this document we evaluate the signal measured for QC
-samples across all data acquired so far, from Oct/2016 to Sep/2020. In particular, we aim at comparing the TIC and BPC of all QC samples and evaluate the retention time and integrated peak
-signal for selected ions (including IS and endogenous metabolites).
+samples across all data acquired so far, from Oct/2016 to Sep/2020. In
+particular, we aim at comparing the TIC and BPC of all QC samples and evaluate
+the retention time and integrated peak signal for selected ions (including IS
+and endogenous metabolites).
 
 
 ```{r libraries, message = FALSE}
@@ -150,8 +152,9 @@ tichr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
 Below we plot the BPC and the TIC for the data set.
 
 ```{r chr-plots, fig.path = IMAGE_PATH, caption = "BPC and TIC of the data set", fig.width = 12, fig.height = 10, echo = FALSE}
-col_year_month <- brewer.pal(3, "Set1")[-3]
-names(col_year_month) <- unique(data_pos$year_month)
+labs <- unique(data_pos$year_month)
+col_year_month <- rainbow(length(labs))
+names(col_year_month) <- labs
 par(mfrow = c(2, 1), mar = c(2, 4.5, 2, 1))
 plot(bpchr, col = paste0(col_year_month[as.character(bpchr$year_month)], 80), main = "BPC",
      xlim = c(0, 220))
@@ -162,9 +165,11 @@ plot(tichr, col = paste0(col_year_month[as.character(tichr$year_month)], 80), ma
 grid()
 ```
 
-The signal in September 2020 seems to start and stops earlier than in previous
+The signal in September 2020 seems to start and stop earlier than in previous
 years or also in February 2020. The bimodal *phospholipid* peak present in most
-samples seems to be replaced by a single peak.
+samples seems to be replaced by a single peak in some of the September samples,
+with the exception of the last 5 samples which again show a large phospholipid
+peak and a less noisy baseline.
 
 Next we plot the distribution of the base peak and total ion signal per sample
 to evaluate potential differences in average intensities.
@@ -186,9 +191,10 @@ grid(nx = NA, ny = NULL)
 The distribution of base peak and total ion signal clearly shows batch
 differences over the years, with the QC samples from the same batch yielding,
 with the exception of the first 2 from the September 2020 (pink samples), about
-the same signal. Also, the signal for the last 4 samples seems to continuously
-decrease. This change is however comparably small and even in previous batches
-such a difference was observed.
+the same signal. Also, the signal for the following 4 samples seems to
+continuously decrease. This change is however comparably small and even in
+previous batches such a difference was observed. The last 5 samples show almost
+no such drift.
 
 
 ## Peak detection results
@@ -217,10 +223,8 @@ retention time and ion for the set of standards.
 ```{r standards}
 library(CompoundDb)
 library(Rdisop)
-std_info <- read.table("C:/Users/vveri/Documents/GitHub/lcms-standards/data/internal_standards.txt",
-   
-  # "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
-    ## "data/standards_dilution.txt",
+std_info <- read.table(
+    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
     sep = "\t", header = TRUE, as.is = TRUE)
 std_info <- std_info[!is.na(std_info[, "POS"]), ]
 rownames(std_info) <- 1:nrow(std_info)
@@ -277,9 +281,9 @@ dr <- paste0(IMAGE_PATH, "peakdetection/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 sample_colors <- col_year_month[as.character(data_pos$year_month)]
 for (i in 1:nrow(std_info)) {
-    cmpname <- gsub("L-", "", std_info$name[i])
-    cmpname <- tolower(gsub(" .*", "", cmpname))
-    filename <- paste0(dr, i, "-", cmpname, "_", "POS", ".png")
+    cmpname <- std_info$name[i]
+    filename <- paste0(dr, gsub("%", "p", cmpname, fixed = TRUE),
+                       "_POS", ".png")
     png(file = filename, width = 16, height = 8, units = "cm",
         res = 300, pointsize = 4)
     chr <- std_info_chr[i, ]
@@ -306,46 +310,68 @@ std_info$rtmin <- NA_real_
 std_info$rtmax <- NA_real_
 ## Add the min and max retention time for compounds we select for further
 ## analysis
-std_info$rtmin[5] <- 167
-std_info$rtmax[5] <- 180
-std_info$rtmin[7] <- 30
-std_info$rtmax[7] <- 40
-std_info$rtmin[12] <- 165
-std_info$rtmax[12] <- 175
-std_info$rtmin[14] <- 170
-std_info$rtmax[14] <- 205
-std_info$rtmin[21] <- 165
-std_info$rtmax[21] <- 180
-std_info$rtmin[33] <- 170
-std_info$rtmax[33] <- 190
-std_info$rtmin[36] <- 160
-std_info$rtmax[36] <- 170
-std_info$rtmin[41] <- 165
-std_info$rtmax[41] <- 180
-std_info$rtmin[43] <- 170
-std_info$rtmax[43] <- 200
-std_info$rtmin[44] <- 180
-std_info$rtmax[44] <- 190
-std_info$rtmin[47] <- 205
-std_info$rtmax[47] <- 225
-std_info$rtmin[57] <- 32
-std_info$rtmax[57] <- 40
-std_info$rtmin[59] <- 185
-std_info$rtmax[59] <- 195
-std_info$rtmin[64] <- 175
-std_info$rtmax[64] <- 190
-std_info$rtmin[65] <- 28
-std_info$rtmax[65] <- 40
-std_info$rtmin[74] <- 178
-std_info$rtmax[74] <- 205
-std_info$rtmin[83] <- 170
-std_info$rtmax[83] <- 205
-std_info$rtmin[95] <- 170
-std_info$rtmax[95] <- 205
-std_info$rtmin[97] <- 165
-std_info$rtmax[97] <- 190
-std_info$rtmin[122] <- 180
-std_info$rtmax[122] <- 225
+std_info$rtmin[std_info$name == "3-Nitrotyrosine"] <- 143
+std_info$rtmax[std_info$name == "3-Nitrotyrosine"] <- 170
+std_info$rtmin[std_info$name == "ADMA"] <- 163
+std_info$rtmax[std_info$name == "ADMA"] <- 190
+std_info$rtmin[std_info$name == "Alanine"] <- 165
+std_info$rtmax[std_info$name == "Alanine"] <- 180
+std_info$rtmin[std_info$name == "Arginine"] <- 170
+std_info$rtmax[std_info$name == "Arginine"] <- 208
+std_info$rtmin[std_info$name == "Asparagine"] <- 177
+std_info$rtmax[std_info$name == "Asparagine"] <- 200
+std_info$rtmin[std_info$name == "Caffeine"] <- 32
+std_info$rtmax[std_info$name == "Caffeine"] <- 40
+std_info$rtmin[std_info$name == "Citrulline"] <- 170
+std_info$rtmax[std_info$name == "Citrulline"] <- 200
+std_info$rtmin[std_info$name == "Creatine"] <- 160
+std_info$rtmax[std_info$name == "Creatine"] <- 190
+std_info$rtmin[std_info$name == "Cystine"] <- 205
+std_info$rtmax[std_info$name == "Cystine"] <- 225
+std_info$rtmin[std_info$name == "Diethyl malonate"] <- 25
+std_info$rtmax[std_info$name == "Diethyl malonate"] <- 35
+std_info$rtmin[std_info$name == "Glutamine"] <- 170
+std_info$rtmax[std_info$name == "Glutamine"] <- 200
+std_info$rtmin[std_info$name == "Glyceraldehyde 2-phosphate"] <- 180
+std_info$rtmax[std_info$name == "Glyceraldehyde 2-phosphate"] <- 225
+std_info$rtmin[std_info$name == "Glycero-phosphocholine"] <- 185
+std_info$rtmax[std_info$name == "Glycero-phosphocholine"] <- 200
+std_info$rtmin[std_info$name == "Glycine"] <- 165
+std_info$rtmax[std_info$name == "Glycine"] <- 180
+std_info$rtmin[std_info$name == "Histidine"] <- 170
+std_info$rtmax[std_info$name == "Histidine"] <- 205
+std_info$rtmin[std_info$name == "Homocysteine"] <- 165
+std_info$rtmax[std_info$name == "Homocysteine"] <- 180
+std_info$rtmin[std_info$name == "Indoleacetic acid"] <- 32
+std_info$rtmax[std_info$name == "Indoleacetic acid"] <- 40
+std_info$rtmin[std_info$name == "Inosine"] <- 135
+std_info$rtmax[std_info$name == "Inosine"] <- 155
+std_info$rtmin[std_info$name == "L-Aspartic Acid"] <- 175
+std_info$rtmax[std_info$name == "L-Aspartic Acid"] <- 195
+std_info$rtmin[std_info$name == "L-Glutamic Acid"] <- 165
+std_info$rtmax[std_info$name == "L-Glutamic Acid"] <- 190
+std_info$rtmin[std_info$name == "Lysine"] <- 170
+std_info$rtmax[std_info$name == "Lysine"] <- 205
+std_info$rtmin[std_info$name == "Methioninesulfoxide"] <- 178
+std_info$rtmax[std_info$name == "Methioninesulfoxide"] <- 193
+std_info$rtmin[std_info$name == "N-Acetylornithine"] <- 170
+std_info$rtmax[std_info$name == "N-Acetylornithine"] <- 210
+std_info$rtmin[std_info$name == "Ornithine"] <- 175
+std_info$rtmax[std_info$name == "Ornithine"] <- 205
+std_info$rtmin[std_info$name == "Putrescine"] <- 155
+std_info$rtmax[std_info$name == "Putrescine"] <- 170
+std_info$rtmin[std_info$name == "Serine"] <- 175
+std_info$rtmax[std_info$name == "Serine"] <- 190
+std_info$rtmin[std_info$name == "Sphingosine"] <- 25
+std_info$rtmax[std_info$name == "Sphingosine"] <- 40
+std_info$rtmin[std_info$name == "Suberic Acid"] <- 30
+std_info$rtmax[std_info$name == "Suberic Acid"] <- 40
+std_info$rtmin[std_info$name == "Taurine"] <- 165
+std_info$rtmax[std_info$name == "Taurine"] <- 180
+std_info$rtmin[std_info$name == "Threonine"] <- 165
+std_info$rtmax[std_info$name == "Threonine"] <- 190
+std_info$rtmin[std_info$name == "Tyrosine"] <- 160
+std_info$rtmax[std_info$name == "Tyrosine"] <- 180
 std_info <- std_info[!is.na(std_info$rtmin), ]
 
 ## Re-create the m/z and rt range matrix
@@ -382,15 +408,24 @@ std_rt <- matrix(ncol = ncol(std_chr), nrow = nrow(std_chr),
 rownames(std_info) <- std_info$name
 rownames(std_rt) <- rownames(std_info)
 std_int <- std_rt
+std_max <- std_int
 for (i in 1:nrow(std_rt)) {
     tmp <- std_chr[i, ]
     tmp <- split.data.frame(chromPeaks(tmp), chromPeaks(tmp)[, "column"])
-    tmp <- lapply(tmp, function(z) z[which.max(z[, "into"]), ])
+    tmp <- lapply(tmp, function(z) z[which.max(z[, "maxo"]), ])
     rts <- vapply(tmp, function(z) z["rt"], numeric(1))
     ints <- vapply(tmp, function(z) z["into"], numeric(1))
+    maxs <- vapply(tmp, function(z) z["maxo"], numeric(1))
     std_rt[i, names(rts)] <- rts
     std_int[i, names(ints)] <- ints
+    std_max[i, names(maxs)] <- maxs
 }
+idx <- order(std_info$RT)
+std_info <- std_info[idx, ]
+std_chr <- std_chr[idx, ]
+std_rt <- std_rt[idx, ]
+std_int <- std_int[idx, ]
+std_max <- std_max[idx, ]
 ```
 
 The table below lists the manually selected standards which will be used for the
@@ -401,13 +436,254 @@ T <- data.frame(std_info[, c("name", "mz_ion")],
                 rt_mean = apply(std_rt, 1, mean, na.rm = TRUE),
                 rt_sd = apply(std_rt, 1, sd, na.rm = TRUE),
                 into_mean = apply(std_int, 1, mean, na.rm = TRUE),
-                into_sd = apply(std_int, 1, sd, na.rm = TRUE))
+                into_cv = rowRsd(std_int, na.rm = TRUE))
 pandoc.table(T, style = "rmarkdown",
              caption = "Selected standards.")
 ```
 
 Retention time shifts for about half of the standards is relatively large (over
-6 seconds). Standard deviations are (unexpectedly) large for all standards.
+6 seconds). Coefficient of variation are large for all standards.
+
+```{r export-eic-selected-standards, echo = FALSE, message = FALSE}
+dr <- paste0(IMAGE_PATH, "selected-standards/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+sample_colors <- col_year_month[as.character(data_pos$year_month)]
+for (i in seq_len(nrow(std_chr))) {
+    fn <- paste0(dr, std_info$name[i], ".png")
+    png(file = fn, width = 16, height = 10, units = "cm",
+        res = 300, pointsize = 4)
+    par(mfrow = c(1, 2), mar = c(5, 4.2, 2, 0.5))
+    chr <- std_chr[i, ]
+    pks <- chromPeaks(chr)
+    plot(chr, col = "#00000040",
+         main = paste0(std_info$name[i], ": ",
+                       format(mz(chr)[1], digits = 6), "-",
+                       format(mz(chr)[2], digits = 6)),
+         peakCol = paste0(sample_colors[pks[, "column"]], 50),
+         peakBg = paste0(sample_colors[pks[, "column"]], 10))
+    ## Indicate the selected peak position.
+    points(std_rt[i, ], std_max[i, ], col = sample_colors)
+    grid()
+    boxplot(log2(std_int), col = paste0(sample_colors, 80), las = 2,
+            names = chr$year_month, ylab = expression(log[2]~intensity))
+    points(x = seq_len(ncol(std_int)), log2(std_int[i, ]), pch = 16,
+           type = "o", cex = 1.5)
+    grid()
+    dev.off()
+}
+```
+
+In addition to the standards we are also identifying chromatographic peaks for
+the internal standards (code not shown).
+
+```{r is-define, echo = FALSE}
+is_info <- read.table(
+    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/internal_standards.txt",
+    sep = "\t", header = TRUE, as.is = TRUE)
+is_info <- is_info[!is.na(is_info[, "POS"]), ]
+rownames(is_info) <- 1:nrow(is_info)
+is_info$mzneut = NA
+is_info$mz_ion = NA
+for (i in seq(nrow(is_info))) {
+    if (grepl("C", is_info$formula[i])){
+        is_info$mzneut[i] <- getMolecule(
+            as.character(is_info$formula[i]))$exactmass
+    } else {
+        is_info$mzneut[i] = as.numeric(is_info$formula[i])
+    }
+    ## Calculate also the m/z
+    is_info$mz_ion[i] <- unlist(
+        mass2mz(is_info$mzneut[i],
+                adduct = as.character(
+                    is_info[i, "POS"])))
+}
+
+## Two-step approach: define first the rt/mz region for each standard and
+## Extract the chromatogram afterwards.
+is_info_mz_rt <- matrix(
+    ncol = 4, nrow = nrow(is_info),
+    dimnames = list(is_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
+for (i in 1:nrow(is_info)) {
+    pks <- chromPeaks(data_pos, mz = is_info$mz_ion[i], ppm = 50)
+    if (nrow(pks)) {
+        rtdiff <- abs(pks[, "rt"] - is_info$RT[i])
+        keep <- which(rtdiff < 40)
+        if (length(keep)) {
+            pks <- pks[keep, , drop = FALSE]
+            mzr <- range(pks[, c("mzmin", "mzmax")])
+            rtr <- range(pks[, c("rtmin", "rtmax")], is_info$RT[i])
+            is_info_mz_rt[i, ] <- c(mzr, rtr)
+        }
+    }
+}
+is_info <- is_info[!is.na(is_info_mz_rt[, "mzmin"]), ]
+is_info_mz_rt <- is_info_mz_rt[!is.na(is_info_mz_rt[, "mzmin"]), ]
+## Extract the ion chromatogram for each standard
+rtr <- is_info_mz_rt[, c("rtmin", "rtmax")]
+rtr[, 1] <- rtr[, 1] - 10
+rtr[, 2] <- rtr[, 2] + 10
+is_info_chr <- chromatogram(
+    data_pos, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
+    rt = rtr, aggregationFun = "max")
+## Plot the extracted ion chromatograms
+dr <- paste0(IMAGE_PATH, "peakdetection/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+sample_colors <- col_year_month[as.character(data_pos$year_month)]
+for (i in 1:nrow(is_info)) {
+    cmpname <- is_info$name[i]
+    filename <- paste0(dr, "IS-", gsub("%", "p", cmpname, fixed = TRUE),
+                       "_", "POS", ".png")
+    png(file = filename, width = 16, height = 8, units = "cm",
+        res = 300, pointsize = 4)
+    chr <- is_info_chr[i, ]
+    pks <- chromPeaks(chr)
+    plot(chr, col = "#00000040",
+         main = paste0(cmpname, ": ",
+                       format(mz(chr)[1], digits = 6), "-",
+                       format(mz(chr)[2], digits = 6)),
+         peakCol = paste0(sample_colors[pks[, "column"]], 50),
+         peakBg = paste0(sample_colors[pks[, "column"]], 10))
+    ## This is just to indicate identified peaks with a rectangle.
+    xcms:::.add_chromatogram_peaks(
+               chr, pks,
+               col = paste0(sample_colors[pks[, "column"]], 40),
+               bg = NA,
+               type = "rectangle")
+    abline(v = is_info$RT[i])
+    dev.off()
+}
+
+is_info$rtmin <- NA_real_
+is_info$rtmax <- NA_real_
+## Add the min and max retention time for compounds we select for further
+## analysis
+is_info$rtmin[is_info$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 165
+is_info$rtmax[is_info$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 175
+is_info$rtmin[is_info$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 165
+is_info$rtmax[is_info$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 175
+is_info$rtmin[is_info$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 170
+is_info$rtmax[is_info$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 200
+is_info$rtmin[is_info$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 170
+is_info$rtmax[is_info$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 195
+is_info$rtmin[is_info$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 205
+is_info$rtmax[is_info$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 230
+is_info$rtmin[is_info$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 165
+is_info$rtmax[is_info$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 190
+is_info$rtmin[is_info$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 170
+is_info$rtmax[is_info$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 210
+is_info$rtmin[is_info$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 170
+is_info$rtmax[is_info$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 210
+is_info$rtmin[is_info$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 155
+is_info$rtmax[is_info$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 167
+is_info$rtmin[is_info$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 140
+is_info$rtmax[is_info$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 163
+is_info$rtmin[is_info$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 163
+is_info$rtmax[is_info$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 177
+is_info$rtmin[is_info$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 175
+is_info$rtmax[is_info$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 190
+is_info$rtmin[is_info$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 165
+is_info$rtmax[is_info$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 185
+is_info$rtmin[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 165
+is_info$rtmax[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 180
+is_info$rtmin[is_info$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 160
+is_info$rtmax[is_info$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 172
+is_info <- is_info[!is.na(is_info$rtmin), ]
+
+## Re-create the m/z and rt range matrix
+is_info_mz_rt <- matrix(
+    ncol = 4, nrow = nrow(is_info),
+    dimnames = list(is_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
+for (i in 1:nrow(is_info)) {
+    pks <- chromPeaks(data_pos, mz = is_info$mz_ion[i], ppm = 50,
+                      rt = c(is_info$rtmin[i], is_info$rtmax[i]))
+    if (nrow(pks)) {
+        mzr <- range(pks[, c("mzmin", "mzmax")])
+        rtr <- range(pks[, c("rtmin", "rtmax")], is_info$RT[i])
+        rtr[1] <- rtr[1] - 1
+        rtr[2] <- rtr[2] + 1
+        is_info_mz_rt[i, ] <- c(mzr, rtr)
+    }
+}
+
+is_chr <- chromatogram(
+    data_pos, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
+    rt = is_info_mz_rt[, c("rtmin", "rtmax")],
+    aggregationFun = "max")
+fData(is_chr) <- cbind(fData(is_chr),
+                       is_info[, c("name", "abbreviation", "formula",
+                                   "POS", "RT")])
+
+## retention time and intensity matrices
+is_rt <- matrix(ncol = ncol(is_chr), nrow = nrow(is_chr),
+                dimnames = dimnames(is_chr))
+rownames(is_info) <- is_info$name
+rownames(is_rt) <- rownames(is_info)
+is_int <- is_rt
+is_max <- is_int
+for (i in 1:nrow(is_rt)) {
+    tmp <- is_chr[i, ]
+    tmp <- split.data.frame(chromPeaks(tmp), chromPeaks(tmp)[, "column"])
+    tmp <- lapply(tmp, function(z) z[which.max(z[, "maxo"]), ])
+    rts <- vapply(tmp, function(z) z["rt"], numeric(1))
+    ints <- vapply(tmp, function(z) z["into"], numeric(1))
+    maxs <- vapply(tmp, function(z) z["maxo"], numeric(1))
+    is_rt[i, names(rts)] <- rts
+    is_int[i, names(ints)] <- ints
+    is_max[i, names(maxs)] <- maxs
+}
+idx <- order(is_info$RT)
+is_info <- is_info[idx, ]
+is_chr <- is_chr[idx, ]
+is_rt <- is_rt[idx, ]
+is_int <- is_int[idx, ]
+is_max <- is_max[idx, ]
+```
+
+The table of the (selected) internal standards is shown below.
+
+```{r is-table, echo = FALSE, results = "asis"}
+T <- data.frame(is_info[, c("name", "mz_ion")],
+                rt_mean = apply(is_rt, 1, mean, na.rm = TRUE),
+                rt_sd = apply(is_rt, 1, sd, na.rm = TRUE),
+                into_mean = apply(is_int, 1, mean, na.rm = TRUE),
+                into_cv = rowRsd(is_int, na.rm = TRUE))
+pandoc.table(T, style = "rmarkdown",
+             caption = "Internal standards.")
+```
+
+With the exception of 3 standards, retention time shifts of all internal
+standards are comparable. Also, the coefficient of variation are for most
+between 0.4 and 0.5.
+
+```{r export-eic-is, echo = FALSE, message = FALSE}
+dr <- paste0(IMAGE_PATH, "internal-standards/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+sample_colors <- col_year_month[as.character(data_pos$year_month)]
+for (i in seq_len(nrow(is_chr))) {
+    fn <- paste0(dr, "IS-", gsub("%", "p", is_info$name[i], fixed = TRUE),
+                 ".png")
+    png(file = fn, width = 16, height = 10, units = "cm",
+        res = 300, pointsize = 4)
+    par(mfrow = c(1, 2), mar = c(5, 4.2, 2, 0.5))
+    chr <- is_chr[i, ]
+    pks <- chromPeaks(chr)
+    plot(chr, col = "#00000040",
+         main = paste0(is_info$name[i], ": ",
+                       format(mz(chr)[1], digits = 6), "-",
+                       format(mz(chr)[2], digits = 6)),
+         peakCol = paste0(sample_colors[pks[, "column"]], 50),
+         peakBg = paste0(sample_colors[pks[, "column"]], 10))
+    ## Indicate the selected peak position.
+    points(is_rt[i, ], is_max[i, ], col = sample_colors)
+    grid()
+    boxplot(log2(is_int), col = paste0(sample_colors, 80), las = 2,
+            names = chr$year_month, ylab = expression(log[2]~intensity))
+    points(x = seq_len(ncol(is_int)), log2(is_int[i, ]), pch = 16,
+           type = "o", cex = 1.5)
+    grid()
+    dev.off()
+}
+```
 
 
 
@@ -417,8 +693,8 @@ In this section we compare the signal of the selected features across the
 batches. This complements the analysis performed on the base peak and total ion
 signal performed above and aims at evaluating within and between-batch signals.
 
-```{r batches-signal-boxplot, echo = FALSE, fig.width = 8, fig.height = 8, fig.cap = "Per sample distribution of base peak intensities (top) and signal distribution of selected ions across batches (bottom).", fig.path = IMAGE_PATH}
-par(mfrow = c(2, 1), mar = c(1, 4.5, 1, 1))
+```{r batches-signal-boxplot, echo = FALSE, fig.width = 12, fig.height = 8, fig.cap = "Per sample distribution of base peak intensities (top) and signal distribution of selected ions (middle) and internal standards (bottom) across batches.", fig.path = IMAGE_PATH}
+par(mfrow = c(3, 1), mar = c(1, 4.5, 1, 1))
 boxplot(lapply(bpchr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
         main = "QC samples, positive polarity",
@@ -428,15 +704,19 @@ boxplot(log2(std_int), ylab = expression(log[2]~intensity), xaxt = "n",
         main = "Selected ions",
         col = paste0(col_year_month[bpchr$year_month], 40))
 grid(nx = NA, ny = NULL)
+boxplot(log2(is_int), ylab = expression(log[2]~intensity), xaxt = "n",
+        main = "Internal standards",
+        col = paste0(col_year_month[bpchr$year_month], 40))
+grid(nx = NA, ny = NULL)
 
 ```
 
-Considering only the selected ions, differences within each batch and also
-between batches (except from the 2 first samples) are smaller than for the base
-peak signal. This suggests the base peak signal to be eventually more affected
-by background or non-specific noise. Also, differences in average signal for the
-last 4 samples is very small suggesting that the data within this batch is
-(relatively) reproducible.
+Considering only the selected ions or the internal satndards, differences within
+each batch and also between batches (except from the 2 first samples) are
+smaller than for the base peak signal. This suggests the base peak signal to be
+eventually more affected by background or non-specific noise. Also, differences
+in average signal for the last 5 samples is very small suggesting that the data
+within this batch (and the previous one) is (relatively) reproducible.
 
 We next evaluate the signal across samples separately for each feature.
 
@@ -457,58 +737,138 @@ Most of the features show the same pattern across samples. This suggests
 *global* batch-specific signal shifts which could be adjusted by the
 between-batch normalization. There are however some features which have
 considerably lower intensities in the last batches from September 2020 (one
-example being Glycero-phosphocholine which was not detected in these batches).
+example being Glycero-phosphocholine which was not detected in most of these
+batches).
+
+To further evaluate whether the differences in feature concentrations are
+related to global signal differences we plot the total ion signal of each sample
+against the average intensity of the standards in that sample.
+
+```{r batches-ti-vs-avg-int, echo = FALSE, fig.width = 12, fig.height = 6, fig.cap = "Total ion signal (x-axis) against average intensity of selected standards (left) and internal standards (right) per sample.", fig.path = IMAGE_PATH}
+ti <- log2(vapply(tichr, function(z) sum(intensity(z), na.rm = TRUE),
+                  numeric(1)))
+std_median <- apply(log2(std_int), 2, median, na.rm = TRUE)
+is_median <- apply(log2(is_int), 2, median, na.rm = TRUE)
+
+par(mfrow = c(1, 2))
+plot(ti, std_median,
+     xlab = "total ion intensity", ylab = "median intensity of standards",
+     main = "Selected ions")
+L <- lm(std_median ~ ti)
+abline(L)
+plot(ti, is_median,
+     xlab = "total ion intensity", ylab = "median intensity of standards",
+     main = "Internal standards")
+L <- lm(is_median ~ ti)
+abline(L)
+```
+
+Indeed, the average intensity of peaks of the selected standards and for the
+internal standards is related to the total signal measured by the MS. Next we
+evaluate for each standard its relationship with the total ion signal.
+
+```{r std-int-to-ti-table, echo = FALSE, results = "asis"}
+std_lm <- vector("list", nrow(std_int))
+for (i in seq_len(nrow(std_int))) {
+    y <- log2(std_int[i, ])
+    std_lm[[i]] <- lm(y ~ ti)
+}
+
+T <- data.frame(name = rownames(std_int),
+                slope = vapply(std_lm, function(z) z$coefficients[2],
+                               numeric(1)),
+                r.squared = vapply(std_lm, function(z) summary(z)$r.squared,
+                                   numeric(1)))
+pandoc.table(
+    T, style = "rmarkdown",
+    caption = paste0("Relationship between intensities of standards to the ",
+                     "total ion signal of a sample."))
+```
+
+For many standards there is a correlation between the intensities and the total
+ion signal of the samples. Some however, specifically *Sphingosine*, *Inosine*,
+*3-Nitrotyrosine*, *Glycine*, *ADMA*, *Lysine*, *Glycero-phosphocholine* and
+*Cystine* this correlation is either absent or poor. We will investigate this in
+more detail in the next section.
+
+Next we perform the same analysis for the internal standards.
+
+```{r is-int-to-ti-table, echo = FALSE, results = "asis"}
+is_lm <- vector("list", nrow(is_int))
+for (i in seq_len(nrow(is_int))) {
+    y <- log2(is_int[i, ])
+    is_lm[[i]] <- lm(y ~ ti)
+}
+
+T <- data.frame(name = rownames(is_int),
+                slope = vapply(is_lm, function(z) z$coefficients[2],
+                               numeric(1)),
+                r.squared = vapply(is_lm, function(z) summary(z)$r.squared,
+                                   numeric(1)))
+pandoc.table(
+    T, style = "rmarkdown",
+    caption = paste0("Relationship between intensities of internal standards ",
+                     "to the total ion signal of a sample."))
+```
+
+For most internal standards their intensity correlates with the total ion signal
+per sample. Exceptions are *Glycine* and *L-Cystine*.
 
 
 ## Feature-wise analysis
 
 In this analysis we evaluate whether some features are more affected by
 intensity differences or retention time shifts than others and try to find
-possible explanations for this.  At first we evaluate whether some features are
+possible explanations for this. At first we evaluate whether some features are
 more affected by retention time shifts (and/or intensity differences) than
-others. Thus we try to answer the question:
-- Are retention time shifts global/systematic or feature-specific?
+others. Thus we evaluate if the retention time shifts are global or
+feature-specific (or rt) dependent.
 
 ```{r feature-rt-shift-boxplot, fig.path = IMAGE_PATH, fig.width = 7, fig.height = 7, fig.cap = "Per-feature retention time difference across the analyzed batches."}
 idx_rt <- order(std_info$rtmin)
 par(mar = c(7, 4.2, 1, 1))
 boxplot(t(std_rt[idx_rt, ]), las = 2, ylab = "retention time")
-grid(ny = NULL, nx = NA)
+grid()
 ```
 
-Some standards show only very variation in retention time while others have a
-rather large retention time shift between batches. It seems that compounds
-eluting very early are less affected by retention time shifts (at least
-considering the standards selected for this analysis). The largest shifts can be
-observed for features eluting on average around 180 seconds.
+Some standards show only very small variations in retention time while others
+have large retention time shifts between batches. It seems that compounds
+eluting very early are less affected by retention time shifts (because they in
+fact are not retained in the column). Interestingly, most standards with large
+retention time shifts elute at around 180 seconds. However, at that time there
+are also standards that are not or much less affected by retention time shifts.
 
 Next we ask the question:
 - is the retention time shift dependent on the feature's m/z or intensity?
+
 To evaluate this potential dependency we plot the standard deviation of the
 feature's retention time against its m/z or average intensity (across all
 samples).
 
-```{r feature-rt-shift-dependency, fig.path = IMAGE_PATH, fig.width = 7, fig.height = 7, fig.cap = "Per-feature retention time difference across the analyzed batches."}
-par(mfrow = c(1, 2))
+```{r feature-rt-shift-dependency, fig.path = IMAGE_PATH, fig.width = 15, fig.height = 5, fig.cap = "Per-feature retention time difference across the analyzed batches."}
+par(mfrow = c(1, 3))
 plot(std_info$mz_ion, apply(std_rt, 1, sd, na.rm = TRUE),
      xlab = "m/z", ylab = "sd retention time")
 grid()
-plot(log2(apply(std_int, 1, mean, na.rm = TRUE)),
+plot(apply(log2(std_int), 1, mean, na.rm = TRUE),
      apply(std_rt, 1, sd, na.rm = TRUE),
      xlab = "mean log2 intensity", ylab = "sd retention time")
 grid()
+plot(apply(log2(std_int), 1, sd, na.rm = TRUE),
+     apply(std_rt, 1, sd, na.rm = TRUE),
+     xlab = "sd log2 intensity", ylab = "sd retention time")
+grid()
+
 ```
 
-While features with an m/z between 130 and 180 and a higher intensity seem to be
-more affected by retention time shifts, no clear (strong) relationship seems to
-be present. An analysis involving more features would be required to consolidate
-this finding.
+There seems to be no dependency between m/z or intensity values and retention
+time shifts and also no relationship between variation in retention time and
+variation in intensity.
 
-Next we try to answer the question:
-- Are intensity differences global or feature-specific?
+Next evaluate the per-feature variance in intensities (across samples).
 
-```{r feature-int-boxplot, fig.path = IMAGE_PATH, fig.width = 7, fig.height = 7, fig.cap = "Per-feature intensity difference across the analyzed batches."}
-par(mar = c(7, 4.2, 1, 1))
+```{r feature-int-boxplot, fig.path = IMAGE_PATH, fig.width = 9, fig.height = 7, fig.cap = "Per-feature intensity difference across the analyzed batches."}
+par(mar = c(9, 4.2, 1, 1))
 boxplot(log2(t(std_int[idx_rt, ])), las = 2, ylab = "log2 intensity")
 grid(ny = NULL, nx = NA)
 ```
@@ -525,17 +885,17 @@ plot(apply(log2(std_int), 1, sd, na.rm = TRUE),
 grid(ny = NULL, nx = NA)
 ```
 
-Again, no clear dependency is detectable.
+Again, no clear dependency is detectable. Thus, the variance in intensity seems
+to be feature specific, but not dependent on the total signal of the standard.
 
-Next we extract the full scan for each standard (at the peak apex retention time
-in each sample).
+As we have already seen in the previous section, for most standards the
+intensity follows the total ion signal of the sample (and hence batch). Only for
+a handful of features there was no such relationship. We are next trying to
+understand why these standards yield different intensities between batches. At
+first we evaluate the full scan at peak position for these standards in each
+sample. We thus extract next the full scan for each standard.
 
 ```{r extract-full-scan}
-## Suberic Acid
-## Glycine
-## Glycero-phosphocholine
-## Putrescine
-
 ## Replace NAs with median of row.
 std_rt_nona <- std_rt
 for (i in seq_len(nrow(std_rt))) {
@@ -563,174 +923,161 @@ for (i in seq_along(std_sp)) {
 
 ```
 
-- For features with large intensity differences: check the full scan: could it
-  be that another ion is formed?
+The first standard is *Sphingosine*. As we can see in the plot below, the
+intensities measured in September 2020 are much lower (compared to the median
+intensity of all standards) than in all other batches.
 
-Below we check the full scan for Glycero-phosphocholine to evaluate if in some
-batches different ions might be generated which could explain the large
-difference in concentrations.
+![](images/random_QC_samples/selected-standards/Sphingosine.png)
+
+We next calculate m/z values for all potential adducts of the compound and
+filter the full scan to only contain these.
 
 ```{r}
-## Glycero-phosphocholine
-plot(log2(std_int[13, ]), apply(log2(std_int), 2, mean, na.rm = TRUE))
-i <- 13
+i <- which(std_info$name == "Sphingosine")
 sps <- std_sp[[i]]
-std_int[i, ]
-## Very high signal in samples 3 and 4, low intensities in 1 and 2. Absent in
-## September 2020.
 
-
-## Plot full scan from 2 and 3
-plotSpectraMirror(sps[2], sps[3], ppm = 0, main = std_info$name[i])
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## signal much higher (generally) in sample 3.
-
-
-## Calculate different ions for the neutral mass.
-adds <- mass2mz(std_info$mzneut[i], adduct = adducts(polarity = "positive"))[[1]]
+adds <- mass2mz(std_info$mzneut[i],
+                adduct = adducts(polarity = "positive"))[[1]]
 adds <- sort(adds[adds > 0 & adds < 1000])
 
-## Keep only peaks matching adducts from the compound.
 sps_adds <- filterMzValues(sps, mz = adds, ppm = 20)
+```
 
-library(MsCoreUtils)
+Next we compare the MS1 spectrum containing only peaks representing potential
+adducts of the compound (*ion spectrum*) for Sphingosine in a sample from
+February 2020 to one from September 2020.
+
+```{r sphingosine-ion-spectrum-mirror-14-15, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 8}
 label_function <- function(x) {
-    names(adds)[closest(mz(x)[[1L]], adds, tolerance = 0, ppm = 40,
-                        duplicates = "closest")]
+    names(adds)[MsCoreUtils::closest(mz(x)[[1L]], adds,
+                                     tolerance = 0, ppm = 40,
+                                     duplicates = "closest")]
 }
-
-## 2 against 3
-plotSpectraMirror(sps_adds[2], sps_adds[3], ppm = 40, main = std_info$name[i],
+plotSpectraMirror(sps_adds[14], sps_adds[15], ppm = 40,
+                  main = paste0(std_info$name[i], "; sample 14/15"),
                   labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - [M+H]+ is much larger in sample 3. [2M+2Na]2+ is higher in sample 2, but
-##   nothing compared to [M+H]+ in sample 3.
+abline(v = std_info$mz_ion[i], lty = 3, col = "#ff000080")
 
-
-## 10 against 11
-plotSpectraMirror(sps_adds[10], sps_adds[11], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - seems simply lower overall signal in sample 11
-
-## 12 against 13
-plotSpectraMirror(sps_adds[12], sps_adds[13], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - seems that by summing [M+H]+ and [2M+2Na]2+ we would have the same
-
-## 14 against 15
-plotSpectraMirror(sps_adds[14], sps_adds[15], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - No signal in sample 15
-
+## Which spectra have the [M+H]+ ion?
+containsMz(sps_adds, mz = std_info$mz_ion[i], ppm = 40, tolerance = 0)
 ```
 
-Putrescine.
+In sample 14 the [M+H]+ ion of Sphingosine yields the largest signal while this
+is not present in the sample 15. Both have however signal for the [M+H+(NaCl)2]+
+adduct. In total we have a match of 6 peaks between both spectra. The total
+absence of the [M+H]+ ion in all samples from September 2020 (except the last 5)
+is unexplainable especially since this ion is present in all other samples
+analyzed. This can also not be explained by a strong retention time shift in
+these samples, since no other peak is present for that m/z from 10 to 50 seconds
+(in any sample).
+
+```{r eval = FALSE, echo = FALSE}
+plotSpectraMirror(sps[14], sps[15])
+abline(v = std_info$mz_ion[i], lty = 3, col = "#ff000080")
+## There's no other large signal for 15, so it can not be ion suppression.
+```
+
+At last we calculate also the pairwise similarity of all ion spectra with each
+other and cluster them.
+
+```{r sphingosine-spectra-correlation-heatmap, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 11, fig.height = 10}
+cormat <- compareSpectra(sps_adds, ppm = 40)
+ann <- pData(data_pos)[, "year_month", drop = FALSE]
+rownames(ann) <- rownames(cormat)
+ann$year_month <- factor(ann$year_month)
+library(pheatmap)
+pheatmap(cormat, annotation_col = ann,
+         annotation_colors = list(year_month = col_year_month))
+```
+
+Samples from September 2020 (except the last 5 samples measured in that month)
+have a different ion spectrum compared to all other samples.
+
+Next we evaluate the signal for *Inosine*. This standard yields lower
+intensities in the second batch from February 2020 (see below).
+
+![](images/random_QC_samples/selected-standards/Inosine.png)
 
 ```{r}
-
-## Putrescine
-plot(log2(std_int[7, ]), apply(log2(std_int), 2, mean, na.rm = TRUE))
-i <- 7
+i <- which(std_info$name == "Inosine")
 sps <- std_sp[[i]]
-std_int[i, ]
-## High signal in samples 3, 4, 11 to 22
 
-
-## Plot full scan from 10 and 11
-plotSpectraMirror(sps[10], sps[11], ppm = 0, main = std_info$name[i])
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## signal much higher (generally) in sample 3.
-
-## Calculate different ions for the neutral mass.
-adds <- mass2mz(std_info$mzneut[i], adduct = adducts(polarity = "positive"))[[1]]
+adds <- mass2mz(std_info$mzneut[i],
+                adduct = adducts(polarity = "positive"))[[1]]
 adds <- sort(adds[adds > 0 & adds < 1000])
 
-## Keep only peaks matching adducts from the compound.
 sps_adds <- filterMzValues(sps, mz = adds, ppm = 20)
-
-## 2 against 3
-plotSpectraMirror(sps_adds[2], sps_adds[3], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - Main ion signal simply larger in sample 3
-
-## 4 against 5
-plotSpectraMirror(sps_adds[4], sps_adds[5], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - Main ion signal simply larger in sample 4
-
-## 10 against 11
-plotSpectraMirror(sps_adds[10], sps_adds[11], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - Main ion signal simply larger in sample 11
-
 ```
+
+Next we compare the ion spectrum for Inosine from samples 12 and 14 (both
+measured in February 2020). Note: the full scan for sample 13 was extracted at a
+potentially wrong retention time (see plot above).
+
+```{r inosine-ion-spectrum-mirror-12-13, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 8}
+plotSpectraMirror(sps_adds[12], sps_adds[14], ppm = 40,
+                  main = paste0(std_info$name[i], "; sample 12/14"),
+                  labels = label_function, labelPos = 4, labelSrt = 45)
+abline(v = std_info$mz_ion[i], lty = 3, col = "#ff000080")
+```
+
+In the analyzed spectrum of sample 14 the [M+Na]+ ion as well as other ions
+containing Na are present, but in a much lower concentration.
+
+Could it be ion suppression that prevents creation of this ion? Evaluate the
+ratio between the tic and the intensity of this ion.
 
 ```{r}
-
-## Suberic acid
-plot(log2(std_int[2, ]), apply(log2(std_int), 2, mean, na.rm = TRUE))
-i <- 2
-sps <- std_sp[[i]]
-std_int[i, ]
-## Missing in many samples, but difference between 14 and 15
-
-
-## Plot full scan from 14 and 15
-plotSpectraMirror(sps[14], sps[15], ppm = 0, main = std_info$name[i])
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## More background signal in sample 14
-
-## Calculate different ions for the neutral mass.
-adds <- mass2mz(std_info$mzneut[i], adduct = adducts(polarity = "positive"))[[1]]
-adds <- sort(adds[adds > 0 & adds < 1000])
-
-## Keep only peaks matching adducts from the compound.
-sps_adds <- filterMzValues(sps, mz = adds, ppm = 40)
-
-## 2 against 3
-plotSpectraMirror(sps_adds[14], sps_adds[15], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - My god - are there different ions generated?
-
-## 4 against 5
-plotSpectraMirror(sps_adds[4], sps_adds[5], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-## - In 5 [M+H-H2O]+ seems to be formed.
-
-## 4 against 11
-plotSpectraMirror(sps_adds[4], sps_adds[11], ppm = 40, main = std_info$name[i],
-                  labels = label_function, labelPos = 4, labelSrt = 45)
-grid()
-abline(v = std_info$mz_ion[i], col = "#ff000060", lty = 3)
-
+sps_tic <- vapply(mz(sps), sum, numeric(1), na.rm = TRUE)
 ```
+
+Plotting the full MS data for sample 12
+
+```{r}
+## maybe need to get spectra left and right of the current one?
+library(magrittr)
+tmp <- data_pos %>%
+    filterFile(12) %>%
+    filterRt(c(135, 155 )) %>%
+    filterMz(c(290.02, 292.09))
+plot(tmp, type = "XIC")
+abline(h = std_info$mz_ion[i], lty = 2)
+
+## data_prof <- readMSData(dir("/data/massspec/mzML/profile/2020",
+##                             full.names = TRUE, recursive = TRUE),
+##                         mode = "onDisk")
+## tmp <- data_prof %>%
+##     filterRt(c(135, 155 )) %>%
+##     filterMz(c(291.0, 291.1))
+## plot(tmp, type = "XIC", col = NA)
+## abline(h = std_info$mz_ion[i], lty = 2)
+```
+
+And the same for sample 14
+
+```{r}
+## maybe need to get spectra left and right of the current one?
+library(magrittr)
+tmp <- data_pos %>%
+    filterFile(14) %>%
+    filterRt(c(135, 155 )) %>%
+    filterMz(c(290.02, 292.09))
+plot(tmp, type = "XIC")
+abline(h = std_info$mz_ion[i], lty = 2)
+```
+
+ion suppression? does the co-eluting signal interfere? Note that also profile
+mode data looks the same.
+- m/z of salt clusters?
+
+
 
 Summary: no clear hint for a batch-specific ion formation.
 
 TODO:
 - for each standard: find all chrom peaks potentially matching an ion and sum up
   that intensities: are these values more reproducible?
-
+- check some internal standards.
+- check full scan for a standard that shows a bad pattern for 2017 samples.
 
 # Session information
 
