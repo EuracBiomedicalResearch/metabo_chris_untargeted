@@ -1084,6 +1084,7 @@ TODO:
 - for each standard: find all chrom peaks potentially matching an ion and sum up
   that intensities: are these values more reproducible?
 - check some internal standards.
+- check full scan for a standard that shows a bad pattern for 2017 samples.
 
 # Session information
 
