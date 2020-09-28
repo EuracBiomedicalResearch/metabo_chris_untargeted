@@ -48,8 +48,10 @@ if (!dir.exists(MZML_PATH))
 
 After the Covid-19 caused lockdown the LC-MS system seemed to no longer generate
 reproducible data. In this document we evaluate the signal measured for QC
-samples across all data acquired so far, from Oct/2016 to Sep/2020. In particular, we aim at comparing the TIC and BPC of all QC samples and evaluate the retention time and integrated peak
-signal for selected ions (including IS and endogenous metabolites).
+samples across all data acquired so far, from Oct/2016 to Sep/2020. In
+particular, we aim at comparing the TIC and BPC of all QC samples and evaluate
+the retention time and integrated peak signal for selected ions (including IS
+and endogenous metabolites).
 
 
 ```{r libraries, message = FALSE}
@@ -150,8 +152,9 @@ tichr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
 Below we plot the BPC and the TIC for the data set.
 
 ```{r chr-plots, fig.path = IMAGE_PATH, caption = "BPC and TIC of the data set", fig.width = 12, fig.height = 10, echo = FALSE}
-col_year_month <- brewer.pal(3, "Set1")[-3]
-names(col_year_month) <- unique(data_pos$year_month)
+labs <- unique(data_pos$year_month)
+col_year_month <- rainbow(length(labs))
+names(col_year_month) <- labs
 par(mfrow = c(2, 1), mar = c(2, 4.5, 2, 1))
 plot(bpchr, col = paste0(col_year_month[as.character(bpchr$year_month)], 80), main = "BPC",
      xlim = c(0, 220))
