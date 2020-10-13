@@ -310,64 +310,80 @@ std_info$rtmin <- NA_real_
 std_info$rtmax <- NA_real_
 ## Add the min and max retention time for compounds we select for further
 ## analysis
-std_info$rtmin[std_info$name == "3-Nitrotyrosine"] <- 143
+std_info$rtmin[std_info$name == "3-Nitrotyrosine"] <- 138
 std_info$rtmax[std_info$name == "3-Nitrotyrosine"] <- 170
+std_info$rtmin[std_info$name == "Acetylhistidine"] <- 165
+std_info$rtmax[std_info$name == "Acetylhistidine"] <- 190
 std_info$rtmin[std_info$name == "ADMA"] <- 163
-std_info$rtmax[std_info$name == "ADMA"] <- 190
-std_info$rtmin[std_info$name == "Alanine"] <- 165
+std_info$rtmax[std_info$name == "ADMA"] <- 198
+std_info$rtmin[std_info$name == "alpha-Aminoadipic acid"] <- 162
+std_info$rtmax[std_info$name == "alpha-Aminoadipic acid"] <- 200
+std_info$rtmin[std_info$name == "Alanine"] <- 160
 std_info$rtmax[std_info$name == "Alanine"] <- 180
-std_info$rtmin[std_info$name == "Arginine"] <- 170
-std_info$rtmax[std_info$name == "Arginine"] <- 208
-std_info$rtmin[std_info$name == "Asparagine"] <- 177
-std_info$rtmax[std_info$name == "Asparagine"] <- 200
-std_info$rtmin[std_info$name == "Caffeine"] <- 32
+std_info$rtmin[std_info$name == "Arginine"] <- 165
+std_info$rtmax[std_info$name == "Arginine"] <- 210
+std_info$rtmin[std_info$name == "Argininosuccinic acid"] <- 185
+std_info$rtmax[std_info$name == "Argininosuccinic acid"] <- 205
+std_info$rtmin[std_info$name == "Asparagine"] <- 178
+std_info$rtmax[std_info$name == "Asparagine"] <- 295
+std_info$rtmin[std_info$name == "Caffeine"] <- 30
 std_info$rtmax[std_info$name == "Caffeine"] <- 40
 std_info$rtmin[std_info$name == "Citrulline"] <- 170
-std_info$rtmax[std_info$name == "Citrulline"] <- 200
-std_info$rtmin[std_info$name == "Creatine"] <- 160
-std_info$rtmax[std_info$name == "Creatine"] <- 190
+std_info$rtmax[std_info$name == "Citrulline"] <- 210
+std_info$rtmin[std_info$name == "Corticosterone"] <- 22
+std_info$rtmax[std_info$name == "Corticosterone"] <- 45
+std_info$rtmin[std_info$name == "Creatine"] <- 158
+std_info$rtmax[std_info$name == "Creatine"] <- 185
 std_info$rtmin[std_info$name == "Cystine"] <- 205
 std_info$rtmax[std_info$name == "Cystine"] <- 225
 std_info$rtmin[std_info$name == "Diethyl malonate"] <- 25
 std_info$rtmax[std_info$name == "Diethyl malonate"] <- 35
+std_info$rtmin[std_info$name == "Dimethylglycine"] <- 160
+std_info$rtmax[std_info$name == "Dimethylglycine"] <- 175
 std_info$rtmin[std_info$name == "Glutamine"] <- 170
-std_info$rtmax[std_info$name == "Glutamine"] <- 200
-std_info$rtmin[std_info$name == "Glyceraldehyde 2-phosphate"] <- 180
-std_info$rtmax[std_info$name == "Glyceraldehyde 2-phosphate"] <- 225
+std_info$rtmax[std_info$name == "Glutamine"] <- 190
 std_info$rtmin[std_info$name == "Glycero-phosphocholine"] <- 185
 std_info$rtmax[std_info$name == "Glycero-phosphocholine"] <- 200
 std_info$rtmin[std_info$name == "Glycine"] <- 165
-std_info$rtmax[std_info$name == "Glycine"] <- 180
+std_info$rtmax[std_info$name == "Glycine"] <- 185
 std_info$rtmin[std_info$name == "Histidine"] <- 170
-std_info$rtmax[std_info$name == "Histidine"] <- 205
-std_info$rtmin[std_info$name == "Homocysteine"] <- 165
+std_info$rtmax[std_info$name == "Histidine"] <- 210
+std_info$rtmin[std_info$name == "Homocysteine"] <- 160
 std_info$rtmax[std_info$name == "Homocysteine"] <- 180
+std_info$rtmin[std_info$name == "Hydroxyproline"] <- 160
+std_info$rtmax[std_info$name == "Hydroxyproline"] <- 180
 std_info$rtmin[std_info$name == "Indoleacetic acid"] <- 32
 std_info$rtmax[std_info$name == "Indoleacetic acid"] <- 40
-std_info$rtmin[std_info$name == "Inosine"] <- 135
+std_info$rtmin[std_info$name == "Inosine"] <- 130
 std_info$rtmax[std_info$name == "Inosine"] <- 155
-std_info$rtmin[std_info$name == "L-Aspartic Acid"] <- 175
+std_info$rtmin[std_info$name == "L-Aspartic Acid"] <- 172
 std_info$rtmax[std_info$name == "L-Aspartic Acid"] <- 195
 std_info$rtmin[std_info$name == "L-Glutamic Acid"] <- 165
 std_info$rtmax[std_info$name == "L-Glutamic Acid"] <- 190
 std_info$rtmin[std_info$name == "Lysine"] <- 170
-std_info$rtmax[std_info$name == "Lysine"] <- 205
+std_info$rtmax[std_info$name == "Lysine"] <- 210
 std_info$rtmin[std_info$name == "Methioninesulfoxide"] <- 178
 std_info$rtmax[std_info$name == "Methioninesulfoxide"] <- 193
 std_info$rtmin[std_info$name == "N-Acetylornithine"] <- 170
 std_info$rtmax[std_info$name == "N-Acetylornithine"] <- 210
 std_info$rtmin[std_info$name == "Ornithine"] <- 175
-std_info$rtmax[std_info$name == "Ornithine"] <- 205
-std_info$rtmin[std_info$name == "Putrescine"] <- 155
-std_info$rtmax[std_info$name == "Putrescine"] <- 170
-std_info$rtmin[std_info$name == "Serine"] <- 175
-std_info$rtmax[std_info$name == "Serine"] <- 190
+std_info$rtmax[std_info$name == "Ornithine"] <- 215
+std_info$rtmin[std_info$name == "Palmitoylcarnitine"] <- 20
+std_info$rtmax[std_info$name == "Palmitoylcarnitine"] <- 43
+std_info$rtmin[std_info$name == "Phenylalanine"] <- 135
+std_info$rtmax[std_info$name == "Phenylalanine"] <- 170
+std_info$rtmin[std_info$name == "Putrescine"] <- 150
+std_info$rtmax[std_info$name == "Putrescine"] <- 173
+std_info$rtmin[std_info$name == "Serine"] <- 173
+std_info$rtmax[std_info$name == "Serine"] <- 195
 std_info$rtmin[std_info$name == "Sphingosine"] <- 25
 std_info$rtmax[std_info$name == "Sphingosine"] <- 40
-std_info$rtmin[std_info$name == "Suberic Acid"] <- 30
-std_info$rtmax[std_info$name == "Suberic Acid"] <- 40
-std_info$rtmin[std_info$name == "Taurine"] <- 165
+std_info$rtmin[std_info$name == "Suberic Acid"] <- 28
+std_info$rtmax[std_info$name == "Suberic Acid"] <- 45
+std_info$rtmin[std_info$name == "Taurine"] <- 160
 std_info$rtmax[std_info$name == "Taurine"] <- 180
+std_info$rtmin[std_info$name == "Threonic Acid"] <- 100
+std_info$rtmax[std_info$name == "Threonic Acid"] <- 140
 std_info$rtmin[std_info$name == "Threonine"] <- 165
 std_info$rtmax[std_info$name == "Threonine"] <- 190
 std_info$rtmin[std_info$name == "Tyrosine"] <- 160
@@ -653,7 +669,7 @@ pandoc.table(T, style = "rmarkdown",
 
 With the exception of 3 standards, retention time shifts of all internal
 standards are comparable. Also, the coefficient of variation are for most
-between 0.4 and 0.5.
+between 0.5 and 0.7.
 
 ```{r export-eic-is, echo = FALSE, message = FALSE}
 dr <- paste0(IMAGE_PATH, "internal-standards/")
@@ -698,25 +714,20 @@ par(mfrow = c(3, 1), mar = c(1, 4.5, 1, 1))
 boxplot(lapply(bpchr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
         main = "QC samples, positive polarity",
-        col = paste0(col_year_month[bpchr$year_month], 40))
+        col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 boxplot(log2(std_int), ylab = expression(log[2]~intensity), xaxt = "n",
         main = "Selected ions",
-        col = paste0(col_year_month[bpchr$year_month], 40))
+        col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 boxplot(log2(is_int), ylab = expression(log[2]~intensity), xaxt = "n",
         main = "Internal standards",
-        col = paste0(col_year_month[bpchr$year_month], 40))
+        col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 
 ```
 
-Considering only the selected ions or the internal satndards, differences within
-each batch and also between batches (except from the 2 first samples) are
-smaller than for the base peak signal. This suggests the base peak signal to be
-eventually more affected by background or non-specific noise. Also, differences
-in average signal for the last 5 samples is very small suggesting that the data
-within this batch (and the previous one) is (relatively) reproducible.
+Boxplot profiles look similar, with at least one problematic batch spotted across the whole selected data set
 
 We next evaluate the signal across samples separately for each feature.
 
@@ -785,10 +796,9 @@ pandoc.table(
                      "total ion signal of a sample."))
 ```
 
-For many standards there is a correlation between the intensities and the total
-ion signal of the samples. Some however, specifically *Sphingosine*, *Inosine*,
-*3-Nitrotyrosine*, *Glycine*, *ADMA*, *Lysine*, *Glycero-phosphocholine* and
-*Cystine* this correlation is either absent or poor. We will investigate this in
+For some standards there is a correlation between the intensities and the total
+ion signal of the samples. Some however, specifically *Threonic Acid*, *Inosine*,
+*Dimethylglicine*, *Indoleacetic acid*, *Suberic Acid* and *alpha-Aminoadipic acid*  this correlation is either absent or poor. We will investigate this in
 more detail in the next section.
 
 Next we perform the same analysis for the internal standards.
@@ -812,7 +822,7 @@ pandoc.table(
 ```
 
 For most internal standards their intensity correlates with the total ion signal
-per sample. Exceptions are *Glycine* and *L-Cystine*.
+per sample. Exceptions are *Glycine*, *L-Proline*, *L-Alanine*, *L-Tyrosine* and *L-Cystine*.
 
 
 ## Feature-wise analysis
