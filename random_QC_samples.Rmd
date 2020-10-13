@@ -143,6 +143,41 @@ if (!any(ls() == "tm"))
     tm <- c(elapsed = 1)
 ```
 
+```{r echo = FALSE, eval = FALSE}
+## Just testing the joyPlot...
+plotChromPeaks(data_pos, file = 12)
+abline(v = c(150, 174))
+
+a <- filterFile(data_pos, file = 12)
+b <- filterFile(data_pos, file = 2)
+plot(chromatogram(a, include = "none"))
+abline(v = c(150, 174))
+par(mfrow = c(1, 2))
+## Focusing on large-mass peaks
+joyPlot(b, rt = c(150, 174), mz = c(400, 1000), yoffset = 0.7)
+joyPlot(a, rt = c(150, 174), mz = c(400, 1000), yoffset = 0.7)
+
+plotChromPeaks(data_pos, file = 12)
+abline(v = c(40, 60))
+joyPlot(a, rt = c(40, 60), yoffset = 0.7, mz = c(200, 1000), spacing = "equal", legend = TRUE)
+grid()
+## Why the hell is this signal shifted in RT?
+## "Cluster" compound already in solution -> different rt.
+
+## Phosoholipid peak
+plot(chromatogram(a, include = "none"))
+abline(v = c(125, 143))
+par(mfrow = c(1, 2))
+joyPlot(b, rt = c(125, 143), yoffset = 0.7)
+joyPlot(a, rt = c(125, 143), yoffset = 0.7)
+
+## The *real* version...
+par(bg = "#000000")
+joyPlot(a, col = "#ffffff", peakBg = "#000000aa", mz = c(400, 1000),
+        yoffset = 0.8, rt = c(150, 174))
+
+```
+
 Processing took `r tm["elapsed"] / 60` minutes.
 
 # Signal evaluation
@@ -1084,6 +1119,7 @@ TODO:
 - for each standard: find all chrom peaks potentially matching an ion and sum up
   that intensities: are these values more reproducible?
 - check some internal standards.
+- check full scan for a standard that shows a bad pattern for 2017 samples.
 
 # Session information
 

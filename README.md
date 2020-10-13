@@ -38,11 +38,6 @@ Johannes Rainer for access).
   *peak_detection.Rmd* file.
 
 
-Previous files:
-- [XCMS_processing.Rmd](XCMS_processing.Rmd): alignment (retention
-  time correction) and correspondence (grouping of peaks across samples)
-  of the data for 1 specific polarity.
-- [XCMS_peak_filling.Rmd](XCMS_peak_filling.Rmd): peak filling of data for 1 specific polarity.
 
 ### Normalization
 
