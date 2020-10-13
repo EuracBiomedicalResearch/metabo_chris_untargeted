@@ -1,5 +1,5 @@
 ---
-title: "XCMS processing of the untargeted metabolomics data from CHRIS"
+title: "Chromatographic peak detection of the CHRIS untargeted metabolomics data"
 author: "Mar Garcia-Aloy, Johannes Rainer"
 output:
   BiocStyle::html_document:
