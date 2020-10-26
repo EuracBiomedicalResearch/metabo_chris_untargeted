@@ -1,0 +1,419 @@
+---
+title: "Quality assessment of the CHRIS untargeted peak detection"
+author: "Johannes Rainer"
+output:
+  BiocStyle::html_document:
+    toc: true
+    number_sections: false
+    toc_float: true
+bibliography: references.bib
+csl: biomed-central.csl
+---
+
+```{r biocstyle, echo = FALSE, results = "asis" }
+library(BiocStyle)
+BiocStyle::markdown()
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+**Modified**: `r file.info("peak_detection_qa.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r settings, echo = FALSE}
+## Set general options
+options(useFancyQuotes = FALSE)
+set.seed(123)
+
+## Define paths:
+FILE_NAME <- "peak_detection_qa"
+## Path to save the images; remove all old images.
+IMAGE_PATH <- paste0("images/", FILE_NAME, "/")
+if (dir.exists(IMAGE_PATH)) unlink(IMAGE_PATH, recursive = TRUE, force = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
+## Path to store RData files
+RDATA_PATH <- paste0("data/RData/", FILE_NAME, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+## Get the number of cpus allocated or fall back to 3
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+
+rt_cut <- 340
+
+MZML_PATH <- "/data/massspec/mzML/"
+if (!dir.exists(MZML_PATH))
+    stop("Can not find the directory with the mzML files: ", MZML_PATH)
+
+```
+
+# Introduction
+
+In this document we perform a quality assessment of the peak detection step of
+the CHRIS untargeted metabolomics data (defined and performed in
+[peak_detection.Rmd](peak_detection.Rmd). The quality assessment is performed on
+the QC samples from each batch of the data set, which represent repeated
+measurement of the same original samples (the *CHRIS POOL*). Also, retention
+time drifts and intensity differences are evaluated on chromatographic peaks
+representing signal from internal standards or a set of known compounds (the
+lab-specific standards).
+
+# Data import
+
+We next load all required libraries and the data. The full data set is reduced
+to only QC samples.
+
+```{r libraries}
+library(xcms)
+library(Rdisop)
+library(pander)
+library(RColorBrewer)
+library(CompoundDb)
+
+register(bpstart(MulticoreParam(ncores, progressbar = TRUE)))
+
+load("data/RData/peak_detection/data_pos_ref.RData")
+blnk_pos <- filterFile(data_pos, file = which(data_pos$type == "BLANK"))
+qc_pos <- filterFile(data_pos, file = which(data_pos$type == "QC"))
+rm(data_pos)
+load("data/RData/peak_detection/data_neg_ref.RData")
+blnk_neg <- filterFile(data_neg, file = which(data_neg$type == "BLANK"))
+qc_neg <- filterFile(data_neg, file = which(data_neg$type == "QC"))
+rm(data_neg)
+
+## At last define colors for each batch.
+btches <- sort(union(unique(qc_pos$batch), unique(qc_neg$batch)))
+col_batch <- rainbow(length(btches))
+names(col_batch) <- btches
+```
+
+# Global quality assessment
+
+For the global quality assessment we evaluate and compare the signal in QC
+samples across all batches. At first we compare the average number of identified
+chromatographic peaks in QC samples per batch.
+
+```{r peak-counts, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 6, fig.height = 6, fig.cap = "Average number of detected peaks in QC samples per batch. Batches are ordered by measurement time."}
+pks_pos <- table(factor(as.integer(chromPeaks(qc_pos)[, "sample"]),
+                        levels = seq_along(fileNames(qc_pos))))
+pks_pos <- split(pks_pos, f = qc_pos$batch)
+pks_pos <- vapply(pks_pos, mean, numeric(1))
+## negative
+pks_neg <- table(factor(as.integer(chromPeaks(qc_neg)[, "sample"]),
+                        levels = seq_along(fileNames(qc_neg))))
+pks_neg <- split(pks_neg, f = qc_neg$batch)
+pks_neg <- vapply(pks_neg, mean, numeric(1))
+par(mfrow = c(2, 1), mar = c(1, 4.5, 1, 1))
+plot(y = pks_pos, x = seq_along(pks_pos), bg = col_batch[names(pks_pos)],
+     main = "positive polarity", xaxt = "n", ylab = "average peak count",
+     pch = 21, xlab = "")
+grid()
+## year_change <- c(1, which(diff(as.numeric(qc_pos$year)) > 0))
+## abline(v = year_change, lty = 2)
+## text(x = year_change, y = rep(2000, length(year_change)),
+##      labels = qc_pos$year[year_change], pos = 4)
+plot(y = pks_neg, x = seq_along(pks_neg), bg = col_batch[names(pks_neg)],
+     main = "negative polarity", xaxt = "n", ylab = "average peak count",
+     pch = 21, xlab = "")
+grid()
+```
+
+The average number of identified peaks in QC samples varies considerably between
+batches (over time). Note that this is related to the average intensity across
+batches.
+
+Next we evaluate the signal of peaks for internal standards in the data set. To
+this end we first load the definition of internal standards (i.e. their expected
+m/z and retention time), identify chromatographic peaks in the data set
+potentially matching these and plot this data (code not shown).
+
+```{r is, echo = FALSE}
+is_info <- read.table(
+    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/internal_standards.txt",
+    sep = "\t", header = TRUE, as.is = TRUE)
+rownames(is_info) <- is_info$name
+is_info$mzneut = NA
+is_info$mz_ion_pos = NA
+is_info$mz_ion_neg = NA
+for (i in seq(nrow(is_info))) {
+    if (grepl("C", is_info$formula[i])){
+        is_info$mzneut[i] <- getMolecule(
+            as.character(is_info$formula[i]))$exactmass
+    } else {
+        is_info$mzneut[i] = as.numeric(is_info$formula[i])
+    }
+    ## Calculate also the m/z
+    if (!is.na(is_info$POS[i]))
+        is_info$mz_ion_pos[i] <- unlist(
+            mass2mz(is_info$mzneut[i], adduct = is_info$POS[i]))
+    if (!is.na(is_info$NEG[i]))
+        is_info$mz_ion_neg[i] <- unlist(
+            mass2mz(is_info$mzneut[i], adduct = is_info$NEG[i]))
+}
+is_pos <- is_info[!is.na(is_info$mz_ion_pos), ]
+is_pos$mz_ion <- is_pos$mz_ion_pos
+is_neg <- is_info[!is.na(is_info$mz_ion_neg), ]
+is_neg$mz_ion <- is_neg$mz_ion_neg
+
+#' @description
+#'
+#' Define m/z and retention time ranges of all chromatographic peaks in `x` that
+#' match the provided m/z and retention time values.
+#'
+#' @param x `XCMSnExp` object with identified chromatographic peaks.
+#'
+#' @param mz `numeric` with m/z values for which chromatographic peaks should
+#'     be found.
+#'
+#' @param rt `numeric` with retention time values for which chromatographic
+#'     peaks should be found.
+#'
+#' @param diffRt `numeric(1)` with the maximal allowed difference between `rt`
+#'     and the chromatographic peak's retention time.
+#'
+#' @param ppm `numeric(1)` with the allowed difference between `mz` and the
+#'     chromatographic peak's m/z.
+#'
+#' @return `matrix` with columnd `"mzmin"`, `"mzmax"`, `"rtmin"`, `"rtmax"`
+#'     with the m/z and retention time ranges calculated on all chromatographic
+#'     peaks in `x` matching `mz` and `rt`. Each row representing the result for
+#'     each value in `mz` and `rt`.
+#'
+#' @note Add this to CompMetaboTools???
+#'
+#' @author Johannes Rainer
+peak_regions_for_mz_rt <- function(x, mz, rt, diffRt = 40, ppm = 50) {
+    if (!hasChromPeaks(x))
+        stop("No chromatographic peaks in 'x'. Please run `findChromPeaks' first.")
+    l <- length(mz)
+    if (l != length(rt))
+        stop("'mz' and 'rt' have to have the same length.")
+    res <- matrix(ncol = 4, nrow = l,
+                  dimnames = list(NULL, c("mzmin", "mzmax", "rtmin", "rtmax")))
+    for (i in seq_len(l)) {
+        pks <- chromPeaks(x, mz = mz[i], ppm = ppm)
+        if (nrow(pks)) {
+            keep <- which(abs(pks[, "rt"] - rt[i]) < diffRt)
+            if (length(keep)) {
+                pks <- pks[keep, , drop = FALSE]
+                res[i, ] <- c(range(pks[, c("mzmin", "mzmax")]),
+                              range(pks[, c("rtmin", "rtmax")]))
+            }
+        }
+    }
+    res
+}
+
+is_pos_mz_rt <- peak_regions_for_mz_rt(
+    qc_pos, mz = is_pos$mz_ion, rt = is_pos$RT)
+is_pos <- is_pos[!is.na(is_pos_mz_rt[, "mzmin"]), ]
+is_pos_mz_rt <- is_pos_mz_rt[!is.na(is_pos_mz_rt[, "mzmin"]), ]
+## Extract the ion chromatogram for each standard
+rtr <- is_pos_mz_rt[, c("rtmin", "rtmax")]
+rtr[, 1] <- rtr[, 1] - 10
+rtr[, 2] <- rtr[, 2] + 10
+is_pos_chr <- chromatogram(
+    qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
+    rt = rtr, aggregationFun = "max")
+
+## Plot the extracted ion chromatograms
+dr <- paste0(IMAGE_PATH, "peakdetection/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+sample_colors <- col_batch[qc_pos$batch]
+for (i in 1:nrow(is_pos)) {
+    cmpname <- is_pos$name[i]
+    filename <- paste0(dr, "IS-", gsub("%", "p", cmpname, fixed = TRUE),
+                       "_POS", ".png")
+    png(file = filename, width = 16, height = 8, units = "cm",
+        res = 300, pointsize = 4)
+    chr <- is_pos_chr[i, ]
+    pks <- chromPeaks(chr)
+    plot(chr, col = "#00000040",
+         main = paste0(cmpname, ": ",
+                       format(mz(chr)[1], digits = 6), "-",
+                       format(mz(chr)[2], digits = 6)),
+         peakCol = paste0(sample_colors[pks[, "column"]], 50),
+         peakBg = paste0(sample_colors[pks[, "column"]], 10))
+    ## This is just to indicate identified peaks with a rectangle.
+    xcms:::.add_chromatogram_peaks(
+               chr, pks,
+               col = paste0(sample_colors[pks[, "column"]], 10),
+               bg = NA,
+               type = "rectangle")
+    abline(v = is_pos$RT[i])
+    dev.off()
+}
+## Define the rt window for standards that look ~ OK.
+is_pos$rtmin <- NA_real_
+is_pos$rtmax <- NA_real_
+is_pos$rtmin[is_pos$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 165
+is_pos$rtmax[is_pos$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 183
+is_pos$rtmin[is_pos$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 160
+is_pos$rtmax[is_pos$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 180
+is_pos$rtmin[is_pos$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 170
+is_pos$rtmax[is_pos$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 220
+is_pos$rtmin[is_pos$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 170
+is_pos$rtmax[is_pos$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 210
+is_pos$rtmin[is_pos$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 205
+is_pos$rtmax[is_pos$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 230
+is_pos$rtmin[is_pos$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 165
+is_pos$rtmax[is_pos$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 200
+is_pos$rtmin[is_pos$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 165
+is_pos$rtmax[is_pos$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 240
+is_pos$rtmin[is_pos$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 180
+is_pos$rtmax[is_pos$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 215
+is_pos$rtmin[is_pos$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 155
+is_pos$rtmax[is_pos$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 170
+is_pos$rtmin[is_pos$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 135
+is_pos$rtmax[is_pos$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 165
+is_pos$rtmin[is_pos$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 158
+is_pos$rtmax[is_pos$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 185
+is_pos$rtmin[is_pos$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 175
+is_pos$rtmax[is_pos$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 195
+is_pos$rtmin[is_pos$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 165
+is_pos$rtmax[is_pos$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 190
+is_pos$rtmin[is_pos$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 155
+is_pos$rtmax[is_pos$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 185
+is_pos$rtmin[is_pos$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 155
+is_pos$rtmax[is_pos$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 175
+is_pos <- is_pos[!is.na(is_pos$rtmin), ]
+
+## Re-create the m/z and rt range matrix
+is_pos_mz_rt <- matrix(
+    ncol = 4, nrow = nrow(is_pos),
+    dimnames = list(is_pos$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
+for (i in 1:nrow(is_pos)) {
+    pks <- chromPeaks(qc_pos, mz = is_pos$mz_ion[i], ppm = 50,
+                      rt = c(is_pos$rtmin[i], is_pos$rtmax[i]))
+    if (nrow(pks)) {
+        mzr <- range(pks[, c("mzmin", "mzmax")])
+        rtr <- range(pks[, c("rtmin", "rtmax")], is_pos$RT[i])
+        rtr[1] <- rtr[1] - 1
+        rtr[2] <- rtr[2] + 1
+        is_pos_mz_rt[i, ] <- c(mzr, rtr)
+    }
+}
+is_pos_chr <- chromatogram(
+    qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
+    rt = is_pos_mz_rt[, c("rtmin", "rtmax")],
+    aggregationFun = "max")
+fData(is_pos_chr) <- cbind(
+    fData(is_pos_chr), is_pos[, c("name", "abbreviation", "formula",
+                                  "POS", "RT")])
+
+## --------------------------------------------------
+## Repeat for negative polarity.
+LLLLL
+is_neg_mz_rt <- peak_regions_for_mz_rt(
+    qc_pos, mz = is_neg$mz_ion, rt = is_neg$RT)
+is_neg <- is_neg[!is.na(is_neg_mz_rt[, "mzmin"]), ]
+is_neg_mz_rt <- is_neg_mz_rt[!is.na(is_neg_mz_rt[, "mzmin"]), ]
+## Extract the ion chromatogram for each standard
+rtr <- is_neg_mz_rt[, c("rtmin", "rtmax")]
+rtr[, 1] <- rtr[, 1] - 10
+rtr[, 2] <- rtr[, 2] + 10
+is_neg_chr <- chromatogram(
+    qc_pos, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
+    rt = rtr, aggregationFun = "max")
+
+## Plot the extracted ion chromatograms
+dr <- paste0(IMAGE_PATH, "peakdetection/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+sample_colors <- col_batch[qc_neg$batch]
+for (i in 1:nrow(is_neg)) {
+    cmpname <- is_neg$name[i]
+    filename <- paste0(dr, "IS-", gsub("%", "p", cmpname, fixed = TRUE),
+                       "_NEG", ".png")
+    png(file = filename, width = 16, height = 8, units = "cm",
+        res = 300, pointsize = 4)
+    chr <- is_neg_chr[i, ]
+    pks <- chromPeaks(chr)
+    plot(chr, col = "#00000040",
+         main = paste0(cmpname, ": ",
+                       format(mz(chr)[1], digits = 6), "-",
+                       format(mz(chr)[2], digits = 6)),
+         peakCol = paste0(sample_colors[pks[, "column"]], 50),
+         peakBg = paste0(sample_colors[pks[, "column"]], 10))
+    ## This is just to indicate identified peaks with a rectangle.
+    xcms:::.add_chromatogram_peaks(
+               chr, pks,
+               col = paste0(sample_colors[pks[, "column"]], 20),
+               bg = NA,
+               type = "rectangle")
+    abline(v = is_neg$RT[i])
+    dev.off()
+}
+## Define the rt window for standards that look ~ OK.
+is_neg$rtmin <- NA_real_
+is_neg$rtmax <- NA_real_
+is_neg$rtmin[is_neg$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 165
+is_neg$rtmax[is_neg$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 183
+is_neg$rtmin[is_neg$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 160
+is_neg$rtmax[is_neg$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 180
+is_neg$rtmin[is_neg$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 170
+is_neg$rtmax[is_neg$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 220
+is_neg$rtmin[is_neg$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 170
+is_neg$rtmax[is_neg$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 210
+is_neg$rtmin[is_neg$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 205
+is_neg$rtmax[is_neg$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 230
+is_neg$rtmin[is_neg$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 165
+is_neg$rtmax[is_neg$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 200
+is_neg$rtmin[is_neg$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 165
+is_neg$rtmax[is_neg$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 240
+is_neg$rtmin[is_neg$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 180
+is_neg$rtmax[is_neg$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 215
+is_neg$rtmin[is_neg$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 155
+is_neg$rtmax[is_neg$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 170
+is_neg$rtmin[is_neg$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 135
+is_neg$rtmax[is_neg$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 165
+is_neg$rtmin[is_neg$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 158
+is_neg$rtmax[is_neg$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 185
+is_neg$rtmin[is_neg$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 175
+is_neg$rtmax[is_neg$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 195
+is_neg$rtmin[is_neg$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 165
+is_neg$rtmax[is_neg$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 190
+is_neg$rtmin[is_neg$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 155
+is_neg$rtmax[is_neg$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 185
+is_neg$rtmin[is_neg$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 155
+is_neg$rtmax[is_neg$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 175
+is_neg <- is_neg[!is.na(is_neg$rtmin), ]
+
+## Re-create the m/z and rt range matrix
+is_neg_mz_rt <- matrix(
+    ncol = 4, nrow = nrow(is_neg),
+    dimnames = list(is_neg$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
+for (i in 1:nrow(is_neg)) {
+    pks <- chromPeaks(qc_neg, mz = is_neg$mz_ion[i], ppm = 50,
+                      rt = c(is_neg$rtmin[i], is_neg$rtmax[i]))
+    if (nrow(pks)) {
+        mzr <- range(pks[, c("mzmin", "mzmax")])
+        rtr <- range(pks[, c("rtmin", "rtmax")], is_neg$RT[i])
+        rtr[1] <- rtr[1] - 1
+        rtr[2] <- rtr[2] + 1
+        is_neg_mz_rt[i, ] <- c(mzr, rtr)
+    }
+}
+is_neg_chr <- chromatogram(
+    qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
+    rt = is_neg_mz_rt[, c("rtmin", "rtmax")],
+    aggregationFun = "max")
+fData(is_neg_chr) <- cbind(
+    fData(is_neg_chr), is_neg[, c("name", "abbreviation", "formula",
+                                  "NEG", "RT")])
+
+```
+
+
+- EIC for internal standards in QC samples. Evaluate them.
+- Manually assign peaks to IS.
+- RSD and retention time drifts for the IS.
+- Repeat for known compounds.
+
+# Per-batch quality assessment
+
+In this section we evaluate the signal within each batch, comparing the data
+from study samples against those of the QC samples.
+
+# Session information
+
+```{r}
+sessionInfo()
+```
