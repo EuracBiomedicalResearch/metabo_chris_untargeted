@@ -1,0 +1,79 @@
+---
+title: "CHRIS untargeted metabolomics: alignment and correspondence analysis"
+author: "Johannes Rainer"
+output:
+  BiocStyle::html_document:
+    toc: true
+    number_sections: false
+    toc_float: true
+bibliography: references.bib
+csl: biomed-central.csl
+---
+
+```{r biocstyle, echo = FALSE, results = "asis" }
+library(BiocStyle)
+BiocStyle::markdown()
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+**Modified**: `r file.info("alignment_correspondence.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r settings, echo = FALSE}
+## Set general options
+options(useFancyQuotes = FALSE)
+set.seed(123)
+
+## Define paths:
+FILE_NAME <- "alignment_correspondence"
+## Path to save the images; remove all old images.
+IMAGE_PATH <- paste0("images/", FILE_NAME, "/")
+if (dir.exists(IMAGE_PATH)) unlink(IMAGE_PATH, recursive = TRUE, force = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
+## Path to store RData files
+RDATA_PATH <- paste0("data/RData/", FILE_NAME, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+## Get the number of cpus allocated or fall back to 3
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+
+rt_cut <- 340
+
+MZML_PATH <- "/data/massspec/mzML/"
+if (!dir.exists(MZML_PATH))
+    stop("Can not find the directory with the mzML files: ", MZML_PATH)
+
+```
+
+- Test first all on *just* the QC samples.
+- perform alignment
+  - subset alignment based on QC samples: QC samples get aligned against each
+    other and then study samples get aligned against QC samples.
+- perform correspondence
+- plot EICs for standards in:
+  - x random samples
+  - 2 QC samples per batch
+- peak filling
+
+# Introduction
+
+This document describes the alignment and correspondence analysis of the
+HILIC-based untargeted metabolomics data from the CHRIS population study.
+
+In a first pilot analysis alignment and correspondence is performed *only* on
+the QC samples of the study.
+
+The chromatographic peak detection was defined in and performed by the
+[peak_detection.Rmd](peak_detection.Rmd) file.
+
+# Alignment
+
+# Correspondence
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+
+# References
