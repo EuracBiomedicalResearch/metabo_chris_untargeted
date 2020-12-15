@@ -85,7 +85,7 @@ exclusion <- c("041016_BLANK_POS_1",
                "20161201_POOL_NEG_2.mzML")
 
 ## Get the number of cpus allocated or fall back to 3
-ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 5))
 
 rt_cut <- 340
 
@@ -185,8 +185,8 @@ mnp <- MergeNeighboringPeaksParam(
     ppm = 10,
     minProp = 0.66)
 
-## register(MulticoreParam(workers = ceiling(ncores * 2/3),
-##                         timeout = 86400L))
+register(MulticoreParam(workers = ceiling(ncores * 2/3),
+                        timeout = 86400L))
 tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
 )
@@ -213,7 +213,15 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
                            "retentionTime", "msLevel", "precursorScanNum",
                            "polarity", "centroided", "seqNum")
     )
-    ## register(MulticoreParam(ncores))
+    register(MulticoreParam(ncores))
+    cwp <- CentWaveParam(
+        peakwidth = c(2, 20),
+        ppm = 50,
+        snthresh = 5,
+        mzdiff = 0.001,
+        prefilter = c(3, 500),
+        noise = 100,
+        integrate = 2)
     system.time(
         data_neg <- findChromPeaks(data_neg, param = cwp)
     )
@@ -221,9 +229,14 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
 } else load(paste0(RDATA_PATH, "data_neg.RData"))
 
 if (!file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))) {
+    mnp <- MergeNeighboringPeaksParam(
+        expandRt = 2,
+        expandMz = 0.001,
+        ppm = 10,
+        minProp = 0.66)
     ## Peak refinement
-    ## register(MulticoreParam(workers = ceiling(ncores * 2/3),
-    ##                         timeout = 86400L))
+    register(MulticoreParam(workers = floor(ncores * 2/3),
+                            timeout = 86400L))
     tm <- system.time(
         data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
     )
