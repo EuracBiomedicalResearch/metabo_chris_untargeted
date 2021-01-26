@@ -298,8 +298,8 @@ We also create base peak chromatograms separately for each plate (code and plots
 not shown here).
 
 ```{r pos-bpc-plate, echo = FALSE}
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
+col_type <- brewer.pal(7, "Set1")[c(2, 3, 5, 4)] # blue, green, orange, purple
+names(col_type) <- c("study", "QC", "BLANK", "QC_DIL")
 batches <- unique(bpc_pos$batch)
 dr <- paste0(IMAGE_PATH, "pos-per-batch/")
 dir.create(dr, showWarnings = FALSE, recursive = TRUE)
