@@ -32,12 +32,13 @@ Johannes Rainer for access).
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
   post-processing of both positive and negative polarity data.
-- [peak_detection_2020.Rmd](peak_detection_2020.Rmd): peak detection and peak
-  post-processing of CHRIS samples measured in 2020. Ultimately (once all
-  samples are measured), these files and samples will be integrated into the
-  *peak_detection.Rmd* file.
+- [peak_detection_qa.Rmd](peak_detection_qa.Rmd): quality assessment and
+  summaries for the peak detection step.
 
-
+TODO:
+- [ ] evaluate alignment on QC samples:
+  - check EICs before/after: are we able to *alleviate* the retention time
+    shifts caused by the LC maintenance in November 2021?
 
 ### Normalization
 
