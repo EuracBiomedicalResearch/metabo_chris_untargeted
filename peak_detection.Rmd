@@ -507,6 +507,13 @@ for (i in 2:length(year_month_x)) {
 
 ```
 
+```{r tics, eval = !file.exists(paste0(RDATA_PATH, "tic_pos.RData"))}
+tic_pos <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
+save(tic_pos, file = paste0(RDATA_PATH, "tic_pos.RData"))
+tic_neg <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "sum")
+save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
+```
+
 
 # Session information
 
