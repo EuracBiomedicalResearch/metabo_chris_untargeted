@@ -145,6 +145,21 @@ data_pos <- selectFeatureData(
 )
 ```
 
+Before proceeding to the peak detection we extract base peak and total ion
+chromatograms.
+
+```{r bpc-pos, eval = !file.exists(paste0(RDATA_PATH, "bpc_pos.RData"))}
+bpc_pos <- chromatogram(data_pos, aggregationFun = "max")
+save(bpc_pos, file = paste0(RDATA_PATH, "bpc_pos.RData"))
+rm(bpc_pos)
+gc()
+tic_pos <- chromatogram(data_pos, aggregationFun = "sum")
+save(tic_pos, file = paste0(RDATA_PATH, "tic_pos.RData"))
+rm(tic_pos)
+gc()
+```
+
+
 # Peak detection and refinement
 
 We perform a centWave-based peak detection followed by a *peak refinement* step
@@ -214,6 +229,14 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
                            "polarity", "centroided", "seqNum")
     )
     register(MulticoreParam(ncores))
+    bpc_neg <- chromatogram(data_neg, aggregationFun = "max")
+    save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
+    rm(bpc_neg)
+    gc()
+    tic_neg <- chromatogram(data_neg, aggregationFun = "sum")
+    save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
+    rm(tic_neg)
+    gc()
     cwp <- CentWaveParam(
         peakwidth = c(2, 20),
         ppm = 50,
@@ -254,11 +277,6 @@ chromatograms of QC samples and the number of identified chromatographic peaks
 across the whole data set. To this end we first extract the base peak
 chromatograms for the positive polarity data (the same code is used to
 create the BPC for negative polarity.
-
-```{r bpc-pos, eval = !file.exists(paste0(RDATA_PATH, "bpc_pos.RData"))}
-bpc_pos <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "max")
-save(bpc_pos, file = paste0(RDATA_PATH, "bpc_pos.RData"))
-```
 
 ```{r bpc-pos-load, echo = FALSE}
 load(paste0(RDATA_PATH, "bpc_pos.RData"))
@@ -406,11 +424,6 @@ peaks, the intensity of the detected peaks is comparable across all batches.
 
 Next we create the same plots for negative polarity.
 
-```{r bpc-neg, eval = !file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))}
-bpc_neg <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "max")
-save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
-```
-
 ```{r bpc-neg-load, echo = FALSE}
 load(paste0(RDATA_PATH, "bpc_neg.RData"))
 ```
@@ -505,13 +518,6 @@ for (i in 2:length(year_month_x)) {
 
 ## dev.off()
 
-```
-
-```{r tics, eval = !file.exists(paste0(RDATA_PATH, "tic_pos.RData"))}
-tic_pos <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
-save(tic_pos, file = paste0(RDATA_PATH, "tic_pos.RData"))
-tic_neg <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "sum")
-save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
 ```
 
 
