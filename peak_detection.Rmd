@@ -136,7 +136,6 @@ data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML_file),
                        pdata = as(AnnotatedDataFrame(pd_pos),
                                   "NAnnotatedDataFrame"),
                        mode = "onDisk")
-
 data_pos <- filterRt(data_pos, c(0, rt_cut))
 data_pos <- selectFeatureData(
     data_pos, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
@@ -200,7 +199,7 @@ mnp <- MergeNeighboringPeaksParam(
     ppm = 10,
     minProp = 0.66)
 
-register(MulticoreParam(workers = ceiling(ncores * 2/3),
+register(MulticoreParam(workers = ceiling(ncores * 2),
                         timeout = 86400L))
 tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
@@ -258,7 +257,7 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))) {
         ppm = 10,
         minProp = 0.66)
     ## Peak refinement
-    register(MulticoreParam(workers = floor(ncores * 2/3),
+    register(MulticoreParam(workers = ceiling(ncores * 2),
                             timeout = 86400L))
     tm <- system.time(
         data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
