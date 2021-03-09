@@ -199,7 +199,7 @@ mnp <- MergeNeighboringPeaksParam(
     ppm = 10,
     minProp = 0.66)
 
-register(MulticoreParam(workers = ceiling(ncores * 2),
+register(MulticoreParam(workers = ceiling(ncores / 2),
                         timeout = 86400L))
 tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
@@ -228,14 +228,18 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
                            "polarity", "centroided", "seqNum")
     )
     register(MulticoreParam(ncores))
-    bpc_neg <- chromatogram(data_neg, aggregationFun = "max")
-    save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
-    rm(bpc_neg)
-    gc()
-    tic_neg <- chromatogram(data_neg, aggregationFun = "sum")
-    save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
-    rm(tic_neg)
-    gc()
+    if (!file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))) {
+        bpc_neg <- chromatogram(data_neg, aggregationFun = "max")
+        save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
+        rm(bpc_neg)
+        gc()
+    }
+    if (!file.exists(paste0(RDATA_PATH, "tic_neg.RData"))) {
+        tic_neg <- chromatogram(data_neg, aggregationFun = "sum")
+        save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
+        rm(tic_neg)
+        gc()
+    }
     cwp <- CentWaveParam(
         peakwidth = c(2, 20),
         ppm = 50,
@@ -257,7 +261,7 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))) {
         ppm = 10,
         minProp = 0.66)
     ## Peak refinement
-    register(MulticoreParam(workers = ceiling(ncores * 2),
+    register(MulticoreParam(workers = ceiling(ncores / 2),
                             timeout = 86400L))
     tm <- system.time(
         data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
