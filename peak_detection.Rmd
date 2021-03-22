@@ -465,8 +465,6 @@ We also create base peak chromatograms separately for each plate (code and plots
 not shown here).
 
 ```{r neg-bpc-plate, echo = FALSE}
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
 batches <- unique(bpc_neg$batch)
 dr <- paste0(IMAGE_PATH, "neg-per-batch/")
 dir.create(dr, showWarnings = FALSE, recursive = TRUE)
@@ -491,8 +489,6 @@ for (batch in batches) {
 
 ```{r neg-peaks-per-file, fig.path = IMAGE_PATH, caption = "Negative polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
 
 intos <- split(log2(chromPeaks(data_neg)[, "into"]),
                f = as.integer(chromPeaks(data_neg)[, "sample"]))
