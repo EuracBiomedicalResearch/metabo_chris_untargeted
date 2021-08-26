@@ -42,7 +42,6 @@ rt_cut <- 340
 MZML_PATH <- "/data/massspec/mzML/"
 if (!dir.exists(MZML_PATH))
     stop("Can not find the directory with the mzML files: ", MZML_PATH)
-
 ```
 
 # Introduction
@@ -67,6 +66,7 @@ library(Rdisop)
 library(pander)
 library(RColorBrewer)
 library(MetaboCoreUtils)
+library(CompMetaboTools)
 
 register(bpstart(MulticoreParam(ncores, progressbar = TRUE)))
 
@@ -228,7 +228,7 @@ this end we first load the definition of internal standards (i.e. their expected
 m/z and retention time), identify chromatographic peaks in the data set
 potentially matching these and plot this data (code not shown).
 
-```{r is, echo = FALSE, eval = FALSE}
+```{r is, echo = FALSE, eval = TRUE}
 is_info <- read.table(
     "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/internal_standards.txt",
     sep = "\t", header = TRUE, as.is = TRUE)
@@ -255,55 +255,6 @@ is_pos <- is_info[!is.na(is_info$mz_ion_pos), ]
 is_pos$mz_ion <- is_pos$mz_ion_pos
 is_neg <- is_info[!is.na(is_info$mz_ion_neg), ]
 is_neg$mz_ion <- is_neg$mz_ion_neg
-
-#' @description
-#'
-#' Define m/z and retention time ranges of all chromatographic peaks in `x` that
-#' match the provided m/z and retention time values.
-#'
-#' @param x `XCMSnExp` object with identified chromatographic peaks.
-#'
-#' @param mz `numeric` with m/z values for which chromatographic peaks should
-#'     be found.
-#'
-#' @param rt `numeric` with retention time values for which chromatographic
-#'     peaks should be found.
-#'
-#' @param diffRt `numeric(1)` with the maximal allowed difference between `rt`
-#'     and the chromatographic peak's retention time.
-#'
-#' @param ppm `numeric(1)` with the allowed difference between `mz` and the
-#'     chromatographic peak's m/z.
-#'
-#' @return `matrix` with columnd `"mzmin"`, `"mzmax"`, `"rtmin"`, `"rtmax"`
-#'     with the m/z and retention time ranges calculated on all chromatographic
-#'     peaks in `x` matching `mz` and `rt`. Each row representing the result for
-#'     each value in `mz` and `rt`.
-#'
-#' @note Add this to CompMetaboTools???
-#'
-#' @author Johannes Rainer
-peak_regions_for_mz_rt <- function(x, mz, rt, diffRt = 40, ppm = 50) {
-    if (!hasChromPeaks(x))
-        stop("No chromatographic peaks in 'x'. Please run `findChromPeaks' first.")
-    l <- length(mz)
-    if (l != length(rt))
-        stop("'mz' and 'rt' have to have the same length.")
-    res <- matrix(ncol = 4, nrow = l,
-                  dimnames = list(NULL, c("mzmin", "mzmax", "rtmin", "rtmax")))
-    for (i in seq_len(l)) {
-        pks <- chromPeaks(x, mz = mz[i], ppm = ppm)
-        if (nrow(pks)) {
-            keep <- which(abs(pks[, "rt"] - rt[i]) < diffRt)
-            if (length(keep)) {
-                pks <- pks[keep, , drop = FALSE]
-                res[i, ] <- c(range(pks[, c("mzmin", "mzmax")]),
-                              range(pks[, c("rtmin", "rtmax")]))
-            }
-        }
-    }
-    res
-}
 
 plot_chrs <- function(x, dir, prefix = "IS-", suffix = "_POS", rect = TRUE) {
     sample_colors <- col_batch[x$batch]
@@ -333,17 +284,18 @@ plot_chrs <- function(x, dir, prefix = "IS-", suffix = "_POS", rect = TRUE) {
     }
 }
 
-is_pos_mz_rt <- peak_regions_for_mz_rt(
-    qc_pos, mz = is_pos$mz_ion, rt = is_pos$RT)
+is_pos_mz_rt <- chromPeakArea(qc_pos, mz = is_pos$mz_ion, rt = is_pos$RT,
+                              diffRt = 40, ppm = 10)
+## is_pos_mz_rt <- peak_regions_for_mz_rt(
+##     qc_pos, mz = is_pos$mz_ion, rt = is_pos$RT)
 is_pos <- is_pos[!is.na(is_pos_mz_rt[, "mzmin"]), ]
 is_pos_mz_rt <- is_pos_mz_rt[!is.na(is_pos_mz_rt[, "mzmin"]), ]
 ## Extract the ion chromatogram for each standard
 rtr <- is_pos_mz_rt[, c("rtmin", "rtmax")]
 rtr[, 1] <- rtr[, 1] - 10
 rtr[, 2] <- rtr[, 2] + 10
-is_pos_chr <- chromatogram(
-    qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
-    rt = rtr, aggregationFun = "max")
+is_pos_chr <- chromatogram(qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
+                           rt = rtr, aggregationFun = "max")
 fData(is_pos_chr) <- cbind(
     fData(is_pos_chr), is_pos[, c("name", "abbreviation", "formula",
                                   "POS", "RT")])
@@ -370,7 +322,7 @@ is_pos$rtmin[is_pos$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 158
 is_pos$rtmax[is_pos$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 200
 is_pos$rtmin[is_pos$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 165
 is_pos$rtmax[is_pos$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 240
-is_pos$rtmin[is_pos$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 174
+is_pos$rtmin[is_pos$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 172
 is_pos$rtmax[is_pos$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 215
 is_pos$rtmin[is_pos$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 150
 is_pos$rtmax[is_pos$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 165
@@ -387,24 +339,11 @@ is_pos$rtmax[is_pos$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 185
 is_pos <- is_pos[!is.na(is_pos$rtmin), ]
 
 ## Re-create the m/z and rt range matrix
-is_pos_mz_rt <- matrix(
-    ncol = 4, nrow = nrow(is_pos),
-    dimnames = list(is_pos$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
-for (i in 1:nrow(is_pos)) {
-    pks <- chromPeaks(qc_pos, mz = is_pos$mz_ion[i], ppm = 50,
-                      rt = c(is_pos$rtmin[i], is_pos$rtmax[i]))
-    if (nrow(pks)) {
-        mzr <- range(pks[, c("mzmin", "mzmax")])
-        rtr <- range(pks[, c("rtmin", "rtmax")], is_pos$RT[i])
-        rtr[1] <- rtr[1] - 1
-        rtr[2] <- rtr[2] + 1
-        is_pos_mz_rt[i, ] <- c(mzr, rtr)
-    }
-}
-is_pos_chr <- chromatogram(
-    qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
-    rt = is_pos_mz_rt[, c("rtmin", "rtmax")],
-    aggregationFun = "max", include = "apex_within")
+is_pos_mz_rt <- chromPeakArea(qc_pos, mz = is_pos$mz_ion, ppm = 10,
+                              rt = is_pos[, c("rtmin", "rtmax")], diffRt = 0)
+is_pos_chr <- chromatogram(qc_pos, mz = is_pos_mz_rt[, c("mzmin", "mzmax")],
+                           rt = is_pos_mz_rt[, c("rtmin", "rtmax")],
+                           aggregationFun = "max", include = "apex_within")
 fData(is_pos_chr) <- cbind(
     fData(is_pos_chr), is_pos[, c("name", "abbreviation", "formula",
                                   "POS", "RT")])
@@ -420,17 +359,16 @@ plot_chrs(is_pos_chr, dr, prefix = "IS-", suffix = "-refined_POS", rect = FALSE)
 
 ## --------------------------------------------------
 ## Repeat for negative polarity.
-is_neg_mz_rt <- peak_regions_for_mz_rt(
-    qc_neg, mz = is_neg$mz_ion, rt = is_neg$RT)
+is_neg_mz_rt <- chromPeakArea(qc_neg, mz = is_neg$mz_ion, rt = is_neg$RT,
+                              diffRt = 40, ppm = 10)
 is_neg <- is_neg[!is.na(is_neg_mz_rt[, "mzmin"]), ]
 is_neg_mz_rt <- is_neg_mz_rt[!is.na(is_neg_mz_rt[, "mzmin"]), ]
 ## Extract the ion chromatogram for each standard
 rtr <- is_neg_mz_rt[, c("rtmin", "rtmax")]
 rtr[, 1] <- rtr[, 1] - 10
 rtr[, 2] <- rtr[, 2] + 10
-is_neg_chr <- chromatogram(
-    qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
-    rt = rtr, aggregationFun = "max")
+is_neg_chr <- chromatogram(qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
+                           rt = rtr, aggregationFun = "max")
 fData(is_neg_chr) <- cbind(
     fData(is_neg_chr), is_neg[, c("name", "abbreviation", "formula",
                                   "NEG", "RT")])
@@ -472,20 +410,8 @@ is_neg$rtmax[is_neg$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 175
 is_neg <- is_neg[!is.na(is_neg$rtmin), ]
 
 ## Re-create the m/z and rt range matrix
-is_neg_mz_rt <- matrix(
-    ncol = 4, nrow = nrow(is_neg),
-    dimnames = list(is_neg$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
-for (i in 1:nrow(is_neg)) {
-    pks <- chromPeaks(qc_neg, mz = is_neg$mz_ion[i], ppm = 50,
-                      rt = c(is_neg$rtmin[i], is_neg$rtmax[i]))
-    if (nrow(pks)) {
-        mzr <- range(pks[, c("mzmin", "mzmax")])
-        rtr <- range(pks[, c("rtmin", "rtmax")], is_neg$RT[i])
-        rtr[1] <- rtr[1] - 1
-        rtr[2] <- rtr[2] + 1
-        is_neg_mz_rt[i, ] <- c(mzr, rtr)
-    }
-}
+is_neg_mz_rt <- chromPeakArea(qc_neg, mz = is_neg$mz_ion, ppm = 10,
+                              rt = is_neg[, c("rtmin", "rtmax")], diffRt = 0)
 is_neg_chr <- chromatogram(
     qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
     rt = is_neg_mz_rt[, c("rtmin", "rtmax")],
@@ -540,7 +466,9 @@ batch_summary <- function(x) {
                        rt_mean = mean(vals$rt, na.rm = TRUE),
                        rt_sd = sd(vals$rt, na.rm = TRUE),
                        into_mean = mean(vals$into, na.rm = TRUE),
-                       into_sd = sd(vals$into, na.rm = TRUE))
+                       into_sd = sd(vals$into, na.rm = TRUE),
+                       into_mean_log2 = mean(log2(vals$into), na.rm = TRUE),
+                       into_sd_log2 = sd(log2(vals$into), na.rm = TRUE))
         }))
     })
     res <- do.call(rbind, res)
@@ -553,7 +481,7 @@ batch_sum_pos <- batch_summary(is_pos_chr)
 batch_sum_neg <- batch_summary(is_neg_chr)
 ```
 
-```{r rt-within-between-batch, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 4, fig.cap = "Evaluation of within and between batch retention time shifts. Each point represents one internal standard. X-axis: mean within-batch standard deviation of retention times. Y-axis: standard deviation of within-batch mean retention times.", echo = FALSE}
+```{r is-rt-within-between-batch, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 4, fig.cap = "Evaluation of within and between batch retention time shifts. Each point represents one internal standard. X-axis: mean within-batch standard deviation of retention times. Y-axis: standard deviation of within-batch mean retention times.", echo = FALSE}
 par(mfrow = c(1, 2))
 tmp <- split(batch_sum_pos, batch_sum_pos$name)
 ## Calculate mean across within batch sd and
@@ -586,7 +514,7 @@ this on the average retention time of each standard in each batch (since we've
 shown above that the retention time shifts within each batch are much smaller
 than between batches).
 
-```{r rt-per-analyte-boxplot, fig.path = IMAGE_PATH, echo = FALSE, fig.width = 10, fig.height = 8, fig.cap = "Variation of internal standards' retention times across batches."}
+```{r is-rt-per-analyte-boxplot, fig.path = IMAGE_PATH, echo = FALSE, fig.width = 10, fig.height = 8, fig.cap = "Variation of internal standards' retention times across batches."}
 batch_sum_pos_analyte <- split(batch_sum_pos, batch_sum_pos$name)
 batch_sum_neg_analyte <- split(batch_sum_neg, batch_sum_neg$name)
 
@@ -607,7 +535,7 @@ The variation in retention times seems to be larger for analytes eluting between
 *constant* per batch, i.e. whether all standards within a batch show the same
 retention time shift.
 
-```{r rt-per-analyte-lines, fig.path = IMAGE_PATH, echo = FALSE, fig.width = 10, fig.height = 12, fig.cap = "Per individual internal standard (within-batch average) retention time across batches."}
+```{r is-rt-per-analyte-lines, fig.path = IMAGE_PATH, echo = FALSE, fig.width = 10, fig.height = 12, fig.cap = "Per individual internal standard (within-batch average) retention time across batches."}
 par(mfrow = c(2, 1), mar = c(7, 4.5, 1, 0.5))
 btches <- unique(is_pos_chr$batch)
 yl <- range(lapply(rt_pos, range))
@@ -643,20 +571,427 @@ hence be possible to align the samples without too large problems.
 
 ### Evaluating signal abundances
 
-- boxplot of IS (per batch or sample) indicating also the mean BPI and the mean
-  into of the 200 highest abundant peaks.
+We next evaluate the variances of signal abundances within and between batches.
 
-```{r is-quantify}
+```{r is-into-within-between-batch, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 4, fig.cap = "Evaluation of within and between batch intensity differences. Each point represents one internal standard. X-axis: mean within-batch standard deviation of intensities. Y-axis: standard deviation of within-batch mean intensities.", echo = FALSE}
+par(mfrow = c(1, 2))
+tmp <- split(batch_sum_pos, batch_sum_pos$name)
+## Calculate mean across within batch sd and
+tmp_pos <- do.call(rbind, lapply(tmp, function(z) {
+    c(mean_sd = mean(z$into_sd_log2, na.rm = TRUE),
+      sd_mean = sd(z$into_mean_log2, na.rm = TRUE))
+}))
+plot(tmp_pos[, 1], tmp_pos[, 2], main = "positive polarity",
+     xlab = "average sd of intensity", ylab = "sd of average intensity")
+tmp <- split(batch_sum_neg, batch_sum_neg$name)
+## Calculate mean across within batch sd and
+tmp_neg <- do.call(rbind, lapply(tmp, function(z) {
+    c(mean_sd = mean(z$into_sd_log2, na.rm = TRUE),
+      sd_mean = sd(z$into_mean_log2, na.rm = TRUE))
+}))
+plot(tmp_neg[, 1], tmp_neg[, 2], main = "negative polarity",
+     xlab = "average sd of intensity", ylab = "sd of average intensity")
+```
 
+As expected, also the within-batch variation of intensities is on average much
+smaller than the variation of the per-batch average intensities across the
+data set. We consider the per-batch average intensities for each internal
+standard for the further analyses.
+
+We next evaluate the distribution of intensities for each internal standard
+across the whole data set to evaluate whether some standards show a larger
+variation than others.
+
+```{r}
+tmp <- split(batch_sum_pos$into_mean_log2, batch_sum_pos$name)
+tmp <- tmp[order(vapply(tmp, mean, numeric(1)))]
+par(mfrow = c(1, 2), mar = c(7, 4, 1, 0.5))
+boxplot(tmp, las = 2, main = "positive polarity",
+        ylab = expression(log[2]~average~into))
+grid(nx = NA, ny = NULL)
+tmp <- split(batch_sum_neg$into_mean_log2, batch_sum_neg$name)
+tmp <- tmp[order(vapply(tmp, mean, numeric(1)))]
+boxplot(tmp, las = 2, main = "negative polarity",
+        ylab = expression(log[2]~average~into))
+grid(nx = NA, ny = NULL)
+```
+
+While for positive polarity all internal standards seem to have about the same
+variance, some standards exhibit a larger variance than others for the negative
+polarity data. For both polarities it seems however that the variance is
+independent of the absolute intensity (i.e. standards with lower intensity don't
+have larger variance).
+
+Next we evaluate whether the signal intensities of internal standards per batch
+are related to the absolute signals measured for that batch. To this end we
+compare the average intensity of internal standards per batch to the average
+total ion current per sample as well as to the average intensity of the top 200
+peaks with highest abundances per batch. Below we thus identify the 200 peaks
+with highest intensities per sample and calculate per batch averages of these
+(first taking the average across the 200 peaks per sample and then calculating
+the average across all samples per batch).
+
+```{r top200-peaks}
+peaks_200_pos <- split(chromPeaks(qc_pos)[, "into"],
+                       chromPeaks(qc_pos)[, "sample"]) |>
+vapply(function(x) mean(sort(x, decreasing = TRUE)[seq_len(200)]), numeric(1))
+
+peaks_200_neg <- split(chromPeaks(qc_neg)[, "into"],
+                       chromPeaks(qc_neg)[, "sample"]) |>
+vapply(function(x) mean(sort(x, decreasing = TRUE)[seq_len(200)]), numeric(1))
+
+peaks_200_batch_pos <- vapply(split(peaks_200_pos, qc_pos$batch),
+                              mean, numeric(1))
+peaks_200_batch_neg <- vapply(split(peaks_200_neg, qc_neg$batch),
+                              mean, numeric(1))
+```
+
+In addition we calculate the average total ion current of all files within a
+batch.
+
+```{r tic-signal, eval = FALSE}
+load(paste0(RDATA_PATH, "tic_qc_pos.RData"))
+load(paste0(RDATA_PATH, "tic_qc_neg.RData"))
+
+
+tic_pos <- split(spectrapply(qc_pos, function(z) sum(intensity(z))),
+                 qc_pos$batch) |>
+vapply(mean, numeric(1))
+
+tic_neg <- split(spectrapply(qc_neg, function(z) sum(intensity(z))),
+                 qc_neg$batch) |>
+vapply(mean, numeric(1))
+```
+
+```{r is-relationship-into-signal-batch, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 8, fit.cap = "Relationship between per-batch average intensities of all internal standards and per-batch average intensity of the top 200 chromatographic peaks with highest abundance (left) and per-batch TIC (right)."}
+## Average intensity across batch
+par(mfrow = c(2, 2))
+is_avg_batch_pos <- vapply(split(batch_sum_pos$into_mean_log2,
+                                 batch_sum_pos$batch),
+                           mean, numeric(1))
+plot(is_avg_batch_pos[names(peaks_200_batch_pos)], log2(peaks_200_batch_pos),
+     main = "positive polarity",
+     xlab = expression(log[2]~signal[top200]),
+     ylab = expression(log[2]~signal[internal~standards]),
+     bg = paste0(col_batch[names(peaks_200_batch_pos)], 60), pch = 21)
+grid()
+L <- lm(log2(peaks_200_batch_pos) ~ is_avg_batch_pos)
+abline(L)
+legend("topleft", legend = paste0("R2 = ", round(summary(L)$r.squared, 2)))
+plot(3, 3) # internal standards vs tic
+## NEG
+is_avg_batch_neg <- vapply(split(batch_sum_neg$into_mean_log2,
+                                 batch_sum_neg$batch),
+                           mean, numeric(1))
+plot(is_avg_batch_neg[names(peaks_200_batch_neg)], log2(peaks_200_batch_neg),
+     main = "negative polarity",
+     xlab = expression(log[2]~signal[top200]),
+     ylab = expression(log[2]~signal[internal~standards]),
+     bg = paste0(col_batch[names(peaks_200_batch_neg)], 60), pch = 21)
+grid()
+L <- lm(log2(peaks_200_batch_neg) ~ is_avg_batch_neg)
+abline(L)
+legend("topleft", legend = paste0("R2 = ", round(summary(L)$r.squared, 2)))
+plot(3, 3) # internal standards vs tic
+```
+
+A high correlation, especially for the positive polarity data, can be seen
+between the average intensities of internal standards and the average abundance
+of the top 200 chromatographic peaks with highest signal. The same relationship
+is present also if individual samples are considered (no average across samples
+within batch). This suggests that variability of internal standard measurements
+between samples and batches is related to the total signal.
+
+```{r is-relationship-into-signal-individual, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 8, fit.cap = "Relationship between per-sample average intensities of all internal standards and per-sample average intensity of the top 200 chromatographic peaks with highest abundance."}
+is_avg_pos <- split(log2(chromPeaks(is_pos_chr)[, "into"]),
+                    chromPeaks(is_pos_chr)[, "sample"]) |>
+vapply(mean, numeric(1))
+is_avg_neg <- split(log2(chromPeaks(is_neg_chr)[, "into"]),
+                    chromPeaks(is_neg_chr)[, "sample"]) |>
+vapply(mean, numeric(1))
+
+par(mfrow = c(1, 2))
+plot(is_avg_pos, log2(peaks_200_pos),
+     main = "positive polarity",
+     xlab = expression(log[2]~signal[top200]),
+     ylab = expression(log[2]~signal[internal~standards]),
+     bg = paste0(col_batch[is_pos_chr$batch], 60), pch = 21)
+grid()
+L <- lm(log2(peaks_200_pos) ~ is_avg_pos)
+abline(L)
+legend("topleft", legend = paste0("R2 = ", round(summary(L)$r.squared, 2)))
+plot(is_avg_neg, log2(peaks_200_neg),
+     main = "negative polarity",
+     xlab = expression(log[2]~signal[top200]),
+     ylab = expression(log[2]~signal[internal~standards]),
+     bg = paste0(col_batch[is_neg_chr$batch], 60), pch = 21)
+grid()
+L <- lm(log2(peaks_200_neg) ~ is_avg_neg)
+abline(L)
+legend("topleft", legend = paste0("R2 = ", round(summary(L)$r.squared, 2)))
 
 ```
 
+In addition we create and export such correlation plots separately for each
+internal standard (not displayed in this report). For some internal standards
+a strong relationship is visible while for others it is not.
 
-- Manually assign peaks to IS -> quantify
-- Boxplot: IS concentrations, add mean BPC and mean peak signal of top 200
-  peaks per sample.
-- RSD and retention time drifts for the IS.
-- Repeat for known compounds.
+```{r is-relationship-into-signal-per-analyte}
+
+nms <- union(batch_sum_pos$name, batch_sum_neg$name)
+for (is in nms) {
+        filename <- paste0(IMAGE_PATH, "IS_", gsub("%", "p", is, fixed = TRUE),
+                           "_signal_relationship.png")
+        png(file = filename, width = 16, height = 8, units = "cm",
+            res = 300, pointsize = 4)
+        par(mfrow = c(1, 2))
+        keep <- batch_sum_pos$name == is
+        if (any(keep)) {
+            is_signal <- batch_sum_pos[batch_sum_pos$name == is, ]
+            plot(is_signal$into_mean_log2,
+                 log2(peaks_200_batch_pos[is_signal$batch]),
+                 bg = paste0(col_batch[is_signal$batch], 80), pch = 21,
+                 xlab = expression(log[2]~signal[top200]),
+                 ylab = expression(log[2]~signal[internal~standards]),
+                 main = is)
+        } else plot(3, 3, pch = NA,
+                    xlab = expression(log[2]~signal[top200]),
+                    ylab = expression(log[2]~signal[internal~standards]),
+                    main = is)
+        grid()
+        keep <- batch_sum_neg$name == is
+        if (any(keep)) {
+            is_signal <- batch_sum_neg[batch_sum_neg$name == is, ]
+            plot(is_signal$into_mean_log2,
+                 log2(peaks_200_batch_neg[is_signal$batch]),
+                 bg = paste0(col_batch[is_signal$batch], 80), pch = 21,
+                 xlab = expression(log[2]~signal[top200]),
+                 ylab = expression(log[2]~signal[internal~standards]),
+                 main = is)
+        } else plot(3, 3, pch = NA,
+                    xlab = expression(log[2]~signal[top200]),
+                    ylab = expression(log[2]~signal[internal~standards]),
+                    main = is)
+        grid()
+        dev.off()
+}
+
+```
+
+TODO Summary.
+So, summarizing.
+
+- retention time shifts within batches are smaller than between
+  batches. Alignment should ideally be performed on the QC samples.
+- extent of retention time shifts dependent on the rt: ranges with smaller
+  shifts and ranges with larger shifts (ion suppression/column overload?).
+- variance in intensity levels seems to be related (for the largest part/most
+  internal standards) to absolute signal per sample. Also here, variance within
+  batch is lower than between batches.
+
+
+## Lab standards
+
+We repeat the analysis performed on the internal standards above also on the
+*lab standards*, i.e. the set of standards that were used to optimize and
+validate the LC-MS setup for the CHRIS study.
+
+```{r std}
+std_info <- read.table(
+    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
+    sep = "\t", header = TRUE, as.is = TRUE)
+std_info <- unique(std_info[, -1])
+rownames(std_info) <- std_info$name
+std_info <- std_info[order(std_info$name), ]
+std_info$mzneut = NA
+std_info$mz_ion_pos = NA
+std_info$mz_ion_neg = NA
+for (i in seq(nrow(std_info))) {
+    if (grepl("C", std_info$formula[i])){
+        std_info$mzneut[i] <- getMolecule(
+            as.character(std_info$formula[i]))$exactmass
+    } else
+        std_info$mzneut[i] = as.numeric(std_info$formula[i])
+    ## Calculate also the m/z
+    if (!is.na(std_info$POS[i]))
+        std_info$mz_ion_pos[i] <-
+            mass2mz(std_info$mzneut[i], adduct = std_info$POS[i])[1, 1]
+    if (!is.na(std_info$NEG[i]))
+        std_info$mz_ion_neg[i] <-
+            mass2mz(std_info$mzneut[i], adduct = std_info$NEG[i])[1, 1]
+}
+std_pos <- std_info[!is.na(std_info$mz_ion_pos), ]
+std_pos$mz_ion <- std_pos$mz_ion_pos
+std_neg <- std_info[!is.na(std_info$mz_ion_neg), ]
+std_neg$mz_ion <- std_neg$mz_ion_neg
+
+std_pos_mz_rt <- chromPeakArea(qc_pos, mz = std_pos$mz_ion, rt = std_pos$RT,
+                               diffRt = 40, ppm = 10)
+std_pos <- std_pos[!is.na(std_pos_mz_rt[, "mzmin"]), ]
+std_pos_mz_rt <- std_pos_mz_rt[!is.na(std_pos_mz_rt[, "mzmin"]), ]
+## Extract the ion chromatogram for each standard
+rtr <- std_pos_mz_rt[, c("rtmin", "rtmax")]
+rtr[, 1] <- rtr[, 1] - 10
+rtr[, 2] <- rtr[, 2] + 10
+std_pos_chr <- chromatogram(qc_pos, mz = std_pos_mz_rt[, c("mzmin", "mzmax")],
+                            rt = rtr, aggregationFun = "max")
+fData(std_pos_chr) <- cbind(
+    fData(std_pos_chr), std_pos[, c("name", "abbreviation", "formula",
+                                    "POS", "RT")])
+
+## Plot the extracted ion chromatograms
+dr <- paste0(IMAGE_PATH, "peakdetection/")
+dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+plot_chrs(std_pos_chr, dr, prefix = "STD-")
+
+## Define the rt window for standards that look ~ OK.
+std_pos$rtmin <- NA_real_
+std_pos$rtmax <- NA_real_
+## Note: just assigning ranges for standards with a signal in MOST samples!
+## Those with a * have a quite broad m/z range and should be rechecked
+std_pos[std_pos$name == "1-Methylhistidine", c("rtmin", "rtmax")] <- c(165, 210)
+std_pos[std_pos$name == "3-Methylhistidine", c("rtmin", "rtmax")] <- c(165, 210)
+std_pos[std_pos$name == "8-Oxo-2-Deoxyguanosine", c("rtmin", "rtmax")] <- c(152, 170) # *
+std_pos[std_pos$name == "Acetylalanine", c("rtmin", "rtmax")] <- c(33, 45)
+std_pos[std_pos$name == "Acetylhistidine", c("rtmin", "rtmax")] <- c(171, 193)
+std_pos[std_pos$name == "Adenine", c("rtmin", "rtmax")] <- c(165, 185)
+std_pos[std_pos$name == "ADMA", c("rtmin", "rtmax")] <- c(163, 200)
+std_pos[std_pos$name == "Alanine", c("rtmin", "rtmax")] <- c(158, 180)
+std_pos[std_pos$name == "Arginine", c("rtmin", "rtmax")] <- c(165, 210) # *
+std_pos[std_pos$name == "Asparagine", c("rtmin", "rtmax")] <- c(175, 195) # *
+std_pos[std_pos$name == "Betaine", c("rtmin", "rtmax")] <- c(150, 170)
+std_pos[std_pos$name == "Caffeine", c("rtmin", "rtmax")] <- c(32, 38) # *
+std_pos[std_pos$name == "cGMP", c("rtmin", "rtmax")] <- c(170, 190)
+std_pos[std_pos$name == "Citrulline", c("rtmin", "rtmax")] <- c(170, 195) # *
+std_pos[std_pos$name == "Creatine", c("rtmin", "rtmax")] <- c(158, 185)   # *
+std_pos[std_pos$name == "Cystine", c("rtmin", "rtmax")] <- c(200, 220)
+std_pos[std_pos$name == "Dimethylglycine", c("rtmin", "rtmax")] <- c(158, 180)
+std_pos[std_pos$name == "Galactitol", c("rtmin", "rtmax")] <- c(155, 169) # *
+std_pos[std_pos$name == "Glucuronic Acid", c("rtmin", "rtmax")] <- c(140, 153)
+std_pos[std_pos$name == "Glutamine", c("rtmin", "rtmax")] <- c(165, 190) # *
+std_pos[std_pos$name == "Glyceraldehyde 2-phosphate", c("rtmin", "rtmax")] <- c(180, 230)
+std_pos[std_pos$name == "Glycero-phosphocholine", c("rtmin", "rtmax")] <- c(185, 200)
+std_pos[std_pos$name == "Glycine", c("rtmin", "rtmax")] <- c(164, 185)
+std_pos[std_pos$name == "Guanine", c("rtmin", "rtmax")] <- c(156, 170)
+std_pos[std_pos$name == "Guanosine", c("rtmin", "rtmax")] <- c(157, 167)
+std_pos[std_pos$name == "Histamine", c("rtmin", "rtmax")] <- c(175, 105)
+std_pos[std_pos$name == "Histidine", c("rtmin", "rtmax")] <- c(170, 210)
+std_pos[std_pos$name == "Hypoxanthine", c("rtmin", "rtmax")] <- c(100, 135)
+std_pos[std_pos$name == "Indoleacetic acid", c("rtmin", "rtmax")] <- c(32, 38)
+std_pos[std_pos$name == "Indolelactic acid", c("rtmin", "rtmax")] <- c(32, 45)
+std_pos[std_pos$name == "Inosine", c("rtmin", "rtmax")] <- c(135, 155) # *
+std_pos[std_pos$name == "L-Aspartic Acid", c("rtmin", "rtmax")] <- c(172, 195)
+std_pos[std_pos$name == "L-Glutamic Acid", c("rtmin", "rtmax")] <- c(165, 185)
+std_pos[std_pos$name == "Lysine", c("rtmin", "rtmax")] <- c(173, 210)
+std_pos[std_pos$name == "Methionine", c("rtmin", "rtmax")] <- c(155, 169)
+std_pos[std_pos$name == "Methioninesulfoxide", c("rtmin", "rtmax")] <- c(174, 190)
+std_pos[std_pos$name == "Ornithine", c("rtmin", "rtmax")] <- c(175, 210)
+std_pos[std_pos$name == "Proline", c("rtmin", "rtmax")] <- c(158, 180)
+std_pos[std_pos$name == "Putrescine", c("rtmin", "rtmax")] <- c(150, 173)
+std_pos[std_pos$name == "Salicylic acid", c("rtmin", "rtmax")] <- c(26, 36)
+std_pos[std_pos$name == "SDMA", c("rtmin", "rtmax")] <- c(163, 200)
+std_pos[std_pos$name == "Serine", c("rtmin", "rtmax")] <- c(171, 192)
+std_pos[std_pos$name == "Sphingosine", c("rtmin", "rtmax")] <- c(28, 38)
+std_pos[std_pos$name == "Taurine", c("rtmin", "rtmax")] <- c(165, 178)
+std_pos[std_pos$name == "Threonine", c("rtmin", "rtmax")] <- c(164, 185)
+std_pos[std_pos$name == "Tryptophan", c("rtmin", "rtmax")] <- c(140, 160) # *
+std_pos[std_pos$name == "Tyrosine", c("rtmin", "rtmax")] <- c(159, 175)
+std_pos[std_pos$name == "Valine", c("rtmin", "rtmax")] <- c(150, 172)
+std_pos <- std_pos[!is.na(std_pos$rtmin), ]
+
+## Re-create the m/z and rt range matrix
+std_pos_mz_rt <- chromPeakArea(qc_pos, mz = std_pos$mz_ion, ppm = 10,
+                               rt = std_pos[, c("rtmin", "rtmax")], diffRt = 0)
+std_pos_chr <- chromatogram(qc_pos, mz = std_pos_mz_rt[, c("mzmin", "mzmax")],
+                            rt = std_pos_mz_rt[, c("rtmin", "rtmax")],
+                            aggregationFun = "max", include = "apex_within")
+fData(std_pos_chr) <- cbind(
+    fData(std_pos_chr), std_pos[, c("name", "abbreviation", "formula",
+                                    "POS", "RT")])
+
+## For each IS (row), in each sample (column) keep the chrom peak with the
+## highest peak.
+std_pos_chr <- filterChromPeaks(std_pos_chr, method = "keepTop",
+                                n = 1L, order = "maxo")
+save(std_pos_chr, file = paste0(RDATA_PATH, "std_pos_chr.RData"))
+## Plot again.
+plot_chrs(std_pos_chr, dr, prefix = "STD-",
+          suffix = "-refined_POS", rect = FALSE)
+
+
+## --------------------------------------------------
+## Repeat for negative polarity.
+is_neg_mz_rt <- chromPeakArea(qc_neg, mz = is_neg$mz_ion, rt = is_neg$RT,
+                              diffRt = 40, ppm = 10)
+is_neg <- is_neg[!is.na(is_neg_mz_rt[, "mzmin"]), ]
+is_neg_mz_rt <- is_neg_mz_rt[!is.na(is_neg_mz_rt[, "mzmin"]), ]
+## Extract the ion chromatogram for each standard
+rtr <- is_neg_mz_rt[, c("rtmin", "rtmax")]
+rtr[, 1] <- rtr[, 1] - 10
+rtr[, 2] <- rtr[, 2] + 10
+is_neg_chr <- chromatogram(qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
+                           rt = rtr, aggregationFun = "max")
+fData(is_neg_chr) <- cbind(
+    fData(is_neg_chr), is_neg[, c("name", "abbreviation", "formula",
+                                  "NEG", "RT")])
+
+## Plot the extracted ion chromatograms
+plot_chrs(is_neg_chr, dr, prefix = "IS-", suffix = "_NEG")
+
+## Define the rt window for standards that look ~ OK.
+is_neg$rtmin <- NA_real_
+is_neg$rtmax <- NA_real_
+is_neg$rtmin[is_neg$name == "Creatinine (N-Methhyl_D3)"] <- 120
+is_neg$rtmax[is_neg$name == "Creatinine (N-Methhyl_D3)"] <- 145
+is_neg$rtmin[is_neg$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 175
+is_neg$rtmax[is_neg$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 187
+is_neg$rtmin[is_neg$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 175
+is_neg$rtmax[is_neg$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 200
+is_neg$rtmin[is_neg$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 170
+is_neg$rtmax[is_neg$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 200
+is_neg$rtmin[is_neg$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 202
+is_neg$rtmax[is_neg$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 230
+is_neg$rtmin[is_neg$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 165
+is_neg$rtmax[is_neg$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 200
+is_neg$rtmin[is_neg$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 175
+is_neg$rtmax[is_neg$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 205
+is_neg$rtmin[is_neg$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 175
+is_neg$rtmax[is_neg$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 205
+is_neg$rtmin[is_neg$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 155
+is_neg$rtmax[is_neg$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 170
+is_neg$rtmin[is_neg$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 140
+is_neg$rtmax[is_neg$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 161
+is_neg$rtmin[is_neg$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 172
+is_neg$rtmax[is_neg$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 190
+is_neg$rtmin[is_neg$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 163
+is_neg$rtmax[is_neg$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 183
+is_neg$rtmin[is_neg$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 160
+is_neg$rtmax[is_neg$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 175
+is_neg$rtmin[is_neg$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 160
+is_neg$rtmax[is_neg$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 175
+is_neg <- is_neg[!is.na(is_neg$rtmin), ]
+
+## Re-create the m/z and rt range matrix
+is_neg_mz_rt <- chromPeakArea(qc_neg, mz = is_neg$mz_ion, ppm = 10,
+                              rt = is_neg[, c("rtmin", "rtmax")], diffRt = 0)
+is_neg_chr <- chromatogram(
+    qc_neg, mz = is_neg_mz_rt[, c("mzmin", "mzmax")],
+    rt = is_neg_mz_rt[, c("rtmin", "rtmax")],
+    aggregationFun = "max", include = "apex_within")
+fData(is_neg_chr) <- cbind(
+    fData(is_neg_chr), is_neg[, c("name", "abbreviation", "formula",
+                                  "NEG", "RT")])
+
+## For each IS (row), in each sample (column) keep the chrom peak with the
+## highest peak.
+is_neg_chr <- filterChromPeaks(is_neg_chr, method = "keepTop",
+                               n = 1L, order = "maxo")
+save(is_neg_chr, file = paste0(RDATA_PATH, "is_neg_chr.RData"))
+## Plot again.
+plot_chrs(is_neg_chr, dr, prefix = "IS-", suffix = "-refined_NEG", rect = FALSE)
+
+```
+
 
 ## Evaluating the *dilution QC samples*
 
