@@ -25,7 +25,7 @@ options(useFancyQuotes = FALSE)
 set.seed(123)
 
 ## Define paths:
-filename <- "random_QC_samples"
+filename <- "random_QC_samples_NEG"
 ## Path to save the images; remove all old images.
 IMAGE_PATH <- paste0("images/", filename, "/")
 dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
@@ -38,10 +38,15 @@ ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
 
 rt_cut <- 340
 
-MZML_PATH <- "mzML/"
+MZML_PATH <- "mzML/NEG/"
 if (!dir.exists(MZML_PATH))
     stop("Can not find the directory with the mzML files: ", MZML_PATH)
 
+ts <- extract_time_stamp(fileNames(data_neg))
+month <- as.integer(format(ts, "%m"))
+month_change <- which(diff(month) > 0)
+year <- as.integer(format(ts, "%Y"))
+year_change <- which(diff(year) > 0)
 ```
 
 # Introduction
@@ -61,22 +66,22 @@ library(xcms)
 library(CompMetaboTools)
 library(Spectra)
 
-injections <- as.data.frame(read_xlsx("QC-2016-2020_09.xlsx"))
-pd_pos <- injections
+injections <- as.data.frame(read_xlsx("QC-2016-2021_05_QC3-6-9_NEG.xlsx"))
+pd_neg <- injections
 ```
 
-Below we load the positive polarity data, subset to the defined retention time
+Below we load the negative polarity data, subset to the defined retention time
 range and remove unnecessary spectrum metadata.
 
-```{r pos-load, eval = !file.exists(paste0(RDATA_PATH, "data_pos.RData"))}
-data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML),
-                       pdata = as(AnnotatedDataFrame(pd_pos),
+```{r neg-load, eval = !file.exists(paste0(RDATA_PATH, "data_neg.RData"))}
+data_neg <- readMSData(files = paste0(MZML_PATH, pd_neg$mzML),
+                       pdata = as(AnnotatedDataFrame(pd_neg),
                                   "NAnnotatedDataFrame"),
                        mode = "onDisk")
 
-data_pos <- filterRt(data_pos, c(0, rt_cut))
-data_pos <- selectFeatureData(
-    data_pos, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
+data_neg <- filterRt(data_neg, c(0, rt_cut))
+data_neg <- selectFeatureData(
+    data_neg, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
                        "msLevel", "precursorScanNum", "polarity", "centroided",
                        "seqNum")
 )
@@ -89,7 +94,7 @@ that aims at reducing the peak detection artifacts, such as split peaks or
 overlapping peaks. Below we define the parameters for the peak detection and
 subsequently perform the analysis.
 
-```{r pos-peak-detection, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_pos.RData"))}
+```{r neg-peak-detection, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_neg.RData"))}
 cwp <- CentWaveParam(
     peakwidth = c(2, 20),
     ppm = 50,
@@ -101,13 +106,13 @@ cwp <- CentWaveParam(
 
 register(MulticoreParam(ncores))
 tm <- system.time(
-    data_pos <- findChromPeaks(data_pos, param = cwp)
+    data_neg <- findChromPeaks(data_neg, param = cwp)
 )
-save(data_pos, file = paste0(RDATA_PATH, "data_pos.RData"))
+save(data_neg, file = paste0(RDATA_PATH, "data_neg.RData"))
 ```
 
-```{r pos-peak-detection-load, echo = FALSE, warning = FALSE, message = FALSE}
-load(paste0(RDATA_PATH, "data_pos.RData"))
+```{r neg-peak-detection-load, echo = FALSE, warning = FALSE, message = FALSE}
+load(paste0(RDATA_PATH, "data_neg.RData"))
 if (!any(ls() == "tm"))
     tm <- c(elapsed = 1)
 ```
@@ -115,7 +120,7 @@ if (!any(ls() == "tm"))
 Next we refine the identified chromatographic peaks. Processing took
 `r tm["elapsed"] / 60` minutes.
 
-```{r pos-peak-refinement, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_pos_ref.RData"))}
+```{r neg-peak-refinement, warning = FALSE, message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))}
 mnp <- MergeNeighboringPeaksParam(
     expandRt = 2,
     expandMz = 0.001,
@@ -125,13 +130,13 @@ mnp <- MergeNeighboringPeaksParam(
 ## register(MulticoreParam(workers = ceiling(ncores * 2/3),
 ##                         timeout = 86400L))
 tm <- system.time(
-    data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
+    data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
 )
-save(data_pos, file = paste0(RDATA_PATH, "data_pos_ref.RData"))
+save(data_neg, file = paste0(RDATA_PATH, "data_neg_ref.RData"))
 ```
 
-```{r pos-peak-refinement-load, echo = FALSE, warning = FALSE, message = FALSE}
-load(paste0(RDATA_PATH, "data_pos_ref.RData"))
+```{r neg-peak-refinement-load, echo = FALSE, warning = FALSE, message = FALSE}
+load(paste0(RDATA_PATH, "data_neg_ref.RData"))
 if (!any(ls() == "tm"))
     tm <- c(elapsed = 1)
 ```
@@ -145,14 +150,14 @@ Processing took `r tm["elapsed"] / 60` minutes.
 Next we extract the base peak and total ion chromatogram.
 
 ```{r chrs}
-bpchr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "max")
-tichr <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "sum")
+bpchr <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "max")
+tichr <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "sum")
 ```
 
 Below we plot the BPC and the TIC for the data set.
 
 ```{r chr-plots, fig.path = IMAGE_PATH, caption = "BPC and TIC of the data set", fig.width = 12, fig.height = 10, echo = FALSE}
-labs <- unique(data_pos$year_month)
+labs <- unique(data_neg$year_month)
 col_year_month <- rainbow(length(labs))
 names(col_year_month) <- labs
 par(mfrow = c(2, 1), mar = c(2, 4.5, 2, 1))
@@ -178,14 +183,21 @@ to evaluate potential differences in average intensities.
 par(mfrow = c(2, 1), mar = c(1, 4.5, 1, 1))
 boxplot(lapply(bpchr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
-        main = "QC samples, positive polarity",
+        main = "QC samples, negative polarity",names = chr$year_month,
         col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
+abline(v = month_change + 0.5, lty = 2)
+text(x = month_change, y = 10, pos = 1, label = month[month_change])
+abline(v = year_change + 0.5, lty = 2)
+text(x = year_change, y = 11, pos = 1, label = ((year[year_change])+1), cex = 1.2, col = 4)
 grid(nx = NA, ny = NULL)
 boxplot(lapply(tichr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~total~ion~intensity), xaxt = "n",
-        main = "QC samples, positive polarity",
+        main = "QC samples, negative polarity", names = chr$year_month,
         col = paste0(col_year_month[as.character(tichr$year_month)], 40))
-grid(nx = NA, ny = NULL)
+abline(v = month_change + 0.5, lty = 2)
+text(x = month_change, y = 15, pos = 1, label = month[month_change])
+abline(v = year_change + 0.5, lty = 2)
+text(x = year_change, y = 16, pos = 1, label = ((year[year_change])+1), cex = 1.2, col = 4)
 ```
 
 The distribution of base peak and total ion signal clearly shows batch
@@ -203,11 +215,11 @@ Next we evaluate the number of identified peaks per sample.
 
 ```{r peak-count-table, results = "asis", echo = FALSE}
 library(pander)
-T <- matrix(as.integer(table(chromPeaks(data_pos)[, "sample"])), ncol = 1)
+T <- matrix(as.integer(table(chromPeaks(data_neg)[, "sample"])), ncol = 1)
 colnames(T) <- "peak count"
-rownames(T) <- data_pos$name
-T <- data.frame(T, year = data_pos$year, month = data_pos$month,
-                day = data_pos$day, check.names = FALSE)
+rownames(T) <- data_neg$name
+T <- data.frame(T, year = data_neg$year, month = data_neg$month,
+                day = data_neg$day, check.names = FALSE)
 pandoc.table(T, style = "rmarkdown",
              caption = "Number of peaks identified in each sample")
 ```
@@ -226,7 +238,7 @@ library(Rdisop)
 std_info <- read.table(
     "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
     sep = "\t", header = TRUE, as.is = TRUE)
-std_info <- std_info[!is.na(std_info[, "POS"]), ]
+std_info <- std_info[!is.na(std_info[, "NEG"]), ]
 rownames(std_info) <- 1:nrow(std_info)
 std_info$mzneut = NA
 std_info$mz_ion = NA
@@ -241,21 +253,21 @@ for (i in seq(nrow(std_info))) {
     std_info$mz_ion[i] <- unlist(
         mass2mz(std_info$mzneut[i],
                 adduct = as.character(
-                    std_info[i, "POS"])))
+                    std_info[i, "NEG"])))
 }
 ```
 
 We then extract the EIC for each standard, visually inspect all of the plots and
 determine for which standards we have an unambiguous mapping to a single peak.
 
-```{r pos-eic-plots, echo = TRUE}
+```{r neg-eic-plots, echo = TRUE}
 ## Two-step approach: define first the rt/mz region for each standard and
 ## Extract the chromatogram afterwards.
 std_info_mz_rt <- matrix(
     ncol = 4, nrow = nrow(std_info),
     dimnames = list(std_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
 for (i in 1:nrow(std_info)) {
-    pks <- chromPeaks(data_pos, mz = std_info$mz_ion[i], ppm = 50)
+    pks <- chromPeaks(data_neg, mz = std_info$mz_ion[i], ppm = 50)
     if (nrow(pks)) {
         rtdiff <- abs(pks[, "rt"] - std_info$RT[i])
         keep <- which(rtdiff < 40)
@@ -274,16 +286,16 @@ rtr <- std_info_mz_rt[, c("rtmin", "rtmax")]
 rtr[, 1] <- rtr[, 1] - 10
 rtr[, 2] <- rtr[, 2] + 10
 std_info_chr <- chromatogram(
-    data_pos, mz = std_info_mz_rt[, c("mzmin", "mzmax")],
+    data_neg, mz = std_info_mz_rt[, c("mzmin", "mzmax")],
     rt = rtr, aggregationFun = "max")
 ## Plot the extracted ion chromatograms
 dr <- paste0(IMAGE_PATH, "peakdetection/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
-sample_colors <- col_year_month[as.character(data_pos$year_month)]
+sample_colors <- col_year_month[as.character(data_neg$year_month)]
 for (i in 1:nrow(std_info)) {
     cmpname <- std_info$name[i]
     filename <- paste0(dr, gsub("%", "p", cmpname, fixed = TRUE),
-                       "_POS", ".png")
+                       "_NEG", ".png")
     png(file = filename, width = 16, height = 8, units = "cm",
         res = 300, pointsize = 4)
     chr <- std_info_chr[i, ]
@@ -310,84 +322,96 @@ std_info$rtmin <- NA_real_
 std_info$rtmax <- NA_real_
 ## Add the min and max retention time for compounds we select for further
 ## analysis
-std_info$rtmin[std_info$name == "3-Nitrotyrosine"] <- 138
-std_info$rtmax[std_info$name == "3-Nitrotyrosine"] <- 170
-std_info$rtmin[std_info$name == "Acetylhistidine"] <- 165
-std_info$rtmax[std_info$name == "Acetylhistidine"] <- 190
-std_info$rtmin[std_info$name == "ADMA"] <- 163
-std_info$rtmax[std_info$name == "ADMA"] <- 198
-std_info$rtmin[std_info$name == "alpha-Aminoadipic acid"] <- 162
-std_info$rtmax[std_info$name == "alpha-Aminoadipic acid"] <- 200
+td_info$rtmin[std_info$name == "3-1,5-anhydro D-glucitol"] <- 115
+std_info$rtmax[std_info$name == "3-1,5-anhydro D-glucitol"] <- 150
+std_info$rtmin[std_info$name == "1-Methylhistidine"] <- 175
+std_info$rtmax[std_info$name == "1-Methylhistidine"] <- 200
+std_info$rtmin[std_info$name == "1-Methylxanthine"] <- 175
+std_info$rtmax[std_info$name == "1-Methylxanthine"] <- 200
+std_info$rtmin[std_info$name == "2-Ketoglutaric acid"] <- 50
+std_info$rtmax[std_info$name == "2-Ketoglutaric acid"] <- 110
+std_info$rtmin[std_info$name == "2-Methylcitric acid"] <- 170
+std_info$rtmax[std_info$name == "2-Methylcitric acid"] <- 190
+std_info$rtmin[std_info$name == "3-Hydroxybutyric Acid"] <- 35
+std_info$rtmax[std_info$name == "3-Hydroxybutyric Acid"] <- 55
+std_info$rtmin[std_info$name == "5-Oxoproline"] <- 40
+std_info$rtmax[std_info$name == "5-Oxoproline"] <- 80
 std_info$rtmin[std_info$name == "Alanine"] <- 160
 std_info$rtmax[std_info$name == "Alanine"] <- 180
+std_info$rtmin[std_info$name == "Alpha-ketoisovaleric acid"] <- 30
+std_info$rtmax[std_info$name == "Alpha-ketoisovaleric acid"] <- 50
 std_info$rtmin[std_info$name == "Arginine"] <- 165
 std_info$rtmax[std_info$name == "Arginine"] <- 210
-std_info$rtmin[std_info$name == "Argininosuccinic acid"] <- 185
-std_info$rtmax[std_info$name == "Argininosuccinic acid"] <- 205
+std_info$rtmin[std_info$name == "Ascorbic Acid"] <- 110
+std_info$rtmax[std_info$name == "Ascorbic Acid"] <- 140
 std_info$rtmin[std_info$name == "Asparagine"] <- 178
-std_info$rtmax[std_info$name == "Asparagine"] <- 295
-std_info$rtmin[std_info$name == "Caffeine"] <- 30
-std_info$rtmax[std_info$name == "Caffeine"] <- 40
+std_info$rtmax[std_info$name == "Asparagine"] <- 195
+std_info$rtmin[std_info$name == "Carnosine"] <- 160
+std_info$rtmax[std_info$name == "Carnosine"] <- 180
 std_info$rtmin[std_info$name == "Citrulline"] <- 170
-std_info$rtmax[std_info$name == "Citrulline"] <- 210
-std_info$rtmin[std_info$name == "Corticosterone"] <- 22
-std_info$rtmax[std_info$name == "Corticosterone"] <- 45
-std_info$rtmin[std_info$name == "Creatine"] <- 158
-std_info$rtmax[std_info$name == "Creatine"] <- 185
+std_info$rtmax[std_info$name == "Citrulline"] <- 195
 std_info$rtmin[std_info$name == "Cystine"] <- 205
 std_info$rtmax[std_info$name == "Cystine"] <- 225
-std_info$rtmin[std_info$name == "Diethyl malonate"] <- 25
-std_info$rtmax[std_info$name == "Diethyl malonate"] <- 35
-std_info$rtmin[std_info$name == "Dimethylglycine"] <- 160
-std_info$rtmax[std_info$name == "Dimethylglycine"] <- 175
+std_info$rtmin[std_info$name == "Galactitol"] <- 160
+std_info$rtmax[std_info$name == "Galactitol"] <-180
+std_info$rtmin[std_info$name == "Gluconic Acid"] <- 165
+std_info$rtmax[std_info$name == "Gluconic Acid"] <-200
+std_info$rtmin[std_info$name == "Glucose"] <- 160
+std_info$rtmax[std_info$name == "Glucose"] <-180
 std_info$rtmin[std_info$name == "Glutamine"] <- 170
 std_info$rtmax[std_info$name == "Glutamine"] <- 190
-std_info$rtmin[std_info$name == "Glycero-phosphocholine"] <- 185
-std_info$rtmax[std_info$name == "Glycero-phosphocholine"] <- 200
-std_info$rtmin[std_info$name == "Glycine"] <- 165
-std_info$rtmax[std_info$name == "Glycine"] <- 185
+std_info$rtmin[std_info$name == "Glutaric acid"] <- 30
+std_info$rtmax[std_info$name == "Glutaric acid"] <- 45
 std_info$rtmin[std_info$name == "Histidine"] <- 170
 std_info$rtmax[std_info$name == "Histidine"] <- 210
-std_info$rtmin[std_info$name == "Homocysteine"] <- 160
-std_info$rtmax[std_info$name == "Homocysteine"] <- 180
-std_info$rtmin[std_info$name == "Hydroxyproline"] <- 160
-std_info$rtmax[std_info$name == "Hydroxyproline"] <- 180
-std_info$rtmin[std_info$name == "Indoleacetic acid"] <- 32
+std_info$rtmin[std_info$name == "homovanilic acid"] <- 30
+std_info$rtmax[std_info$name == "homovanilic acid"] <- 55
+std_info$rtmin[std_info$name == "Hydroxyproline"] <- 162
+std_info$rtmax[std_info$name == "Hydroxyproline"] <- 182
+std_info$rtmin[std_info$name == "Indoleacetic acid"] <- 30
 std_info$rtmax[std_info$name == "Indoleacetic acid"] <- 40
-std_info$rtmin[std_info$name == "Inosine"] <- 130
-std_info$rtmax[std_info$name == "Inosine"] <- 155
-std_info$rtmin[std_info$name == "L-Aspartic Acid"] <- 172
-std_info$rtmax[std_info$name == "L-Aspartic Acid"] <- 195
+std_info$rtmin[std_info$name == "Inosine"] <- 135
+std_info$rtmax[std_info$name == "Inosine"] <- 158
+std_info$rtmin[std_info$name == "Ketoleucine"] <- 30
+std_info$rtmax[std_info$name == "Ketoleucine"] <- 40
+std_info$rtmin[std_info$name == "Lactic acid"] <- 30
+std_info$rtmax[std_info$name == "Lactic acid"] <- 60
 std_info$rtmin[std_info$name == "L-Glutamic Acid"] <- 165
 std_info$rtmax[std_info$name == "L-Glutamic Acid"] <- 190
 std_info$rtmin[std_info$name == "Lysine"] <- 170
 std_info$rtmax[std_info$name == "Lysine"] <- 210
-std_info$rtmin[std_info$name == "Methioninesulfoxide"] <- 178
-std_info$rtmax[std_info$name == "Methioninesulfoxide"] <- 193
-std_info$rtmin[std_info$name == "N-Acetylornithine"] <- 170
-std_info$rtmax[std_info$name == "N-Acetylornithine"] <- 210
+std_info$rtmin[std_info$name == "Myo-Inositol"] <- 182
+std_info$rtmax[std_info$name == "Myo-Inositol"] <- 200
 std_info$rtmin[std_info$name == "Ornithine"] <- 175
 std_info$rtmax[std_info$name == "Ornithine"] <- 215
-std_info$rtmin[std_info$name == "Palmitoylcarnitine"] <- 20
-std_info$rtmax[std_info$name == "Palmitoylcarnitine"] <- 43
 std_info$rtmin[std_info$name == "Phenylalanine"] <- 135
 std_info$rtmax[std_info$name == "Phenylalanine"] <- 170
-std_info$rtmin[std_info$name == "Putrescine"] <- 150
-std_info$rtmax[std_info$name == "Putrescine"] <- 173
+std_info$rtmin[std_info$name == "p-Hydroxyphenylacetic acid"] <- 25
+std_info$rtmax[std_info$name == "p-Hydroxyphenylacetic acid"] <- 40
+std_info$rtmin[std_info$name == "Pyruvic Acid"] <- 30
+std_info$rtmax[std_info$name == "Pyruvic Acid"] <- 55
+std_info$rtmin[std_info$name == "Salicylic acid"] <- 30
+std_info$rtmax[std_info$name == "Salicylic acid"] <- 40
+std_info$rtmin[std_info$name == "Sebacic acid"] <- 25
+std_info$rtmax[std_info$name == "Sebacic acid"] <- 50
 std_info$rtmin[std_info$name == "Serine"] <- 173
 std_info$rtmax[std_info$name == "Serine"] <- 195
-std_info$rtmin[std_info$name == "Sphingosine"] <- 25
-std_info$rtmax[std_info$name == "Sphingosine"] <- 40
-std_info$rtmin[std_info$name == "Suberic Acid"] <- 28
-std_info$rtmax[std_info$name == "Suberic Acid"] <- 45
+std_info$rtmin[std_info$name == "Succinylacetone"] <- 30
+std_info$rtmax[std_info$name == "Succinylacetone"] <- 40
 std_info$rtmin[std_info$name == "Taurine"] <- 160
 std_info$rtmax[std_info$name == "Taurine"] <- 180
-std_info$rtmin[std_info$name == "Threonic Acid"] <- 100
-std_info$rtmax[std_info$name == "Threonic Acid"] <- 140
 std_info$rtmin[std_info$name == "Threonine"] <- 165
 std_info$rtmax[std_info$name == "Threonine"] <- 190
+std_info$rtmin[std_info$name == "Tryptophan"] <- 140
+std_info$rtmax[std_info$name == "Tryptophan"] <- 165
 std_info$rtmin[std_info$name == "Tyrosine"] <- 160
 std_info$rtmax[std_info$name == "Tyrosine"] <- 180
+std_info$rtmin[std_info$name == "Uridine"] <- 90
+std_info$rtmax[std_info$name == "Uridine"] <- 135
+std_info$rtmin[std_info$name == "Valine"] <- 158
+std_info$rtmax[std_info$name == "Valine"] <- 175
+std_info$rtmin[std_info$name == "Xanthine"] <- 130
+std_info$rtmax[std_info$name == "Xanthine"] <- 150
 std_info <- std_info[!is.na(std_info$rtmin), ]
 
 ## Re-create the m/z and rt range matrix
@@ -395,7 +419,7 @@ std_info_mz_rt <- matrix(
     ncol = 4, nrow = nrow(std_info),
     dimnames = list(std_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
 for (i in 1:nrow(std_info)) {
-    pks <- chromPeaks(data_pos, mz = std_info$mz_ion[i], ppm = 50,
+    pks <- chromPeaks(data_neg, mz = std_info$mz_ion[i], ppm = 50,
                       rt = c(std_info$rtmin[i], std_info$rtmax[i]))
     if (nrow(pks)) {
         mzr <- range(pks[, c("mzmin", "mzmax")])
@@ -407,12 +431,12 @@ for (i in 1:nrow(std_info)) {
 }
 
 std_chr <- chromatogram(
-    data_pos, mz = std_info_mz_rt[, c("mzmin", "mzmax")],
+    data_neg, mz = std_info_mz_rt[, c("mzmin", "mzmax")],
     rt = std_info_mz_rt[, c("rtmin", "rtmax")],
     aggregationFun = "max")
 fData(std_chr) <- cbind(fData(std_chr),
                         std_info[, c("name", "HMDB.code", "formula",
-                                     "POS", "RT")])
+                                     "NEG", "RT")])
 ```
 
 Next we select for each of the selected standards the largest peak signal in
@@ -463,12 +487,12 @@ Retention time shifts for about half of the standards is relatively large (over
 ```{r export-eic-selected-standards, echo = FALSE, message = FALSE}
 dr <- paste0(IMAGE_PATH, "selected-standards/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
-sample_colors <- col_year_month[as.character(data_pos$year_month)]
+sample_colors <- col_year_month[as.character(data_neg$year_month)]
 for (i in seq_len(nrow(std_chr))) {
     fn <- paste0(dr, std_info$name[i], ".png")
     png(file = fn, width = 16, height = 10, units = "cm",
         res = 300, pointsize = 4)
-    par(mfrow = c(1, 2), mar = c(5, 4.2, 2, 0.5))
+    par(mfrow = c(2, 1), mar = c(5, 4.2, 2, 0.5))
     chr <- std_chr[i, ]
     pks <- chromPeaks(chr)
     plot(chr, col = "#00000040",
@@ -480,14 +504,15 @@ for (i in seq_len(nrow(std_chr))) {
     ## Indicate the selected peak position.
     points(std_rt[i, ], std_max[i, ], col = sample_colors)
     grid()
-    boxplot(log2(std_int), col = paste0(sample_colors, 80), las = 2,
+    boxplot(log2(std_int), col = paste0(sample_colors, 30), las = 2,
             names = chr$year_month, ylab = expression(log[2]~intensity))
-    points(x = seq_len(ncol(std_int)), log2(std_int[i, ]), pch = 16,
-           type = "o", cex = 1.5)
+    points(x = seq_len(ncol(std_int)), log2(std_int[i, ]), pch = 21,
+          cex = 1.5, bg = "red")
     grid()
     dev.off()
 }
 ```
+
 
 In addition to the standards we are also identifying chromatographic peaks for
 the internal standards (code not shown).
@@ -496,7 +521,7 @@ the internal standards (code not shown).
 is_info <- read.table(
     "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/internal_standards.txt",
     sep = "\t", header = TRUE, as.is = TRUE)
-is_info <- is_info[!is.na(is_info[, "POS"]), ]
+is_info <- is_info[!is.na(is_info[, "NEG"]), ]
 rownames(is_info) <- 1:nrow(is_info)
 is_info$mzneut = NA
 is_info$mz_ion = NA
@@ -511,7 +536,7 @@ for (i in seq(nrow(is_info))) {
     is_info$mz_ion[i] <- unlist(
         mass2mz(is_info$mzneut[i],
                 adduct = as.character(
-                    is_info[i, "POS"])))
+                    is_info[i, "NEG"])))
 }
 
 ## Two-step approach: define first the rt/mz region for each standard and
@@ -520,7 +545,7 @@ is_info_mz_rt <- matrix(
     ncol = 4, nrow = nrow(is_info),
     dimnames = list(is_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
 for (i in 1:nrow(is_info)) {
-    pks <- chromPeaks(data_pos, mz = is_info$mz_ion[i], ppm = 50)
+    pks <- chromPeaks(data_neg, mz = is_info$mz_ion[i], ppm = 50)
     if (nrow(pks)) {
         rtdiff <- abs(pks[, "rt"] - is_info$RT[i])
         keep <- which(rtdiff < 40)
@@ -539,16 +564,16 @@ rtr <- is_info_mz_rt[, c("rtmin", "rtmax")]
 rtr[, 1] <- rtr[, 1] - 10
 rtr[, 2] <- rtr[, 2] + 10
 is_info_chr <- chromatogram(
-    data_pos, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
+    data_neg, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
     rt = rtr, aggregationFun = "max")
 ## Plot the extracted ion chromatograms
 dr <- paste0(IMAGE_PATH, "peakdetection/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
-sample_colors <- col_year_month[as.character(data_pos$year_month)]
+sample_colors <- col_year_month[as.character(data_neg$year_month)]
 for (i in 1:nrow(is_info)) {
     cmpname <- is_info$name[i]
     filename <- paste0(dr, "IS-", gsub("%", "p", cmpname, fixed = TRUE),
-                       "_", "POS", ".png")
+                       "_", "NEG", ".png")
     png(file = filename, width = 16, height = 8, units = "cm",
         res = 300, pointsize = 4)
     chr <- is_info_chr[i, ]
@@ -573,15 +598,11 @@ is_info$rtmin <- NA_real_
 is_info$rtmax <- NA_real_
 ## Add the min and max retention time for compounds we select for further
 ## analysis
-is_info$rtmin[is_info$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 165
-is_info$rtmax[is_info$name == "Glycine (13C2, 99%; 15N, 99%)"] <- 175
-is_info$rtmin[is_info$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 165
-is_info$rtmax[is_info$name == "L-Alanine (13C3, 99%; 15N, 99%)"] <- 175
 is_info$rtmin[is_info$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 170
 is_info$rtmax[is_info$name == "L-Arginine HCl (13C6, 99%; 15N4, 99%)"] <- 200
 is_info$rtmin[is_info$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 170
 is_info$rtmax[is_info$name == "L-Aspartic acid (13C4, 99%; 15N, 99%)"] <- 195
-is_info$rtmin[is_info$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 205
+is_info$rtmin[is_info$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 202
 is_info$rtmax[is_info$name == "L-Cystine (13C6, 99%; 15N2, 99%)"] <- 230
 is_info$rtmin[is_info$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 165
 is_info$rtmax[is_info$name == "L-Glutamic acid (13C5, 99%; 15N, 99%)"] <- 190
@@ -589,20 +610,15 @@ is_info$rtmin[is_info$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 170
 is_info$rtmax[is_info$name == "L-Histidine HCl H2O (13C6; 15N3, 99%)"] <- 210
 is_info$rtmin[is_info$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 170
 is_info$rtmax[is_info$name == "L-Lysine 2HCl (13C6, 99%; 15N2, 99%)"] <- 210
-is_info$rtmin[is_info$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 155
-is_info$rtmax[is_info$name == "L-Methionine (13C5, 99%; 15N, 99%)"] <- 167
 is_info$rtmin[is_info$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 140
 is_info$rtmax[is_info$name == "L-Phenylalanine (13C9, 99%; 15N, 99%)"] <- 163
-is_info$rtmin[is_info$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 163
-is_info$rtmax[is_info$name == "L-Proline (13C5, 99%; 15N, 99%)"] <- 177
-is_info$rtmin[is_info$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 175
+is_info$rtmin[is_info$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 170
 is_info$rtmax[is_info$name == "L-Serine (13C3, 99%; 15N, 99%)"] <- 190
 is_info$rtmin[is_info$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 165
 is_info$rtmax[is_info$name == "L-Threonine (13C4, 99%; 15N, 99%)"] <- 185
-is_info$rtmin[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 165
-is_info$rtmax[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 180
-is_info$rtmin[is_info$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 160
-is_info$rtmax[is_info$name == "L-Valine (13C5, 99%; 15N, 99%)"] <- 172
+is_info$rtmin[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 160
+is_info$rtmax[is_info$name == "L-Tyrosine (13C9, 99%; 15N, 99%)"] <- 175
+
 is_info <- is_info[!is.na(is_info$rtmin), ]
 
 ## Re-create the m/z and rt range matrix
@@ -610,7 +626,7 @@ is_info_mz_rt <- matrix(
     ncol = 4, nrow = nrow(is_info),
     dimnames = list(is_info$name, c("mzmin", "mzmax", "rtmin", "rtmax")))
 for (i in 1:nrow(is_info)) {
-    pks <- chromPeaks(data_pos, mz = is_info$mz_ion[i], ppm = 50,
+    pks <- chromPeaks(data_neg, mz = is_info$mz_ion[i], ppm = 50,
                       rt = c(is_info$rtmin[i], is_info$rtmax[i]))
     if (nrow(pks)) {
         mzr <- range(pks[, c("mzmin", "mzmax")])
@@ -622,12 +638,12 @@ for (i in 1:nrow(is_info)) {
 }
 
 is_chr <- chromatogram(
-    data_pos, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
+    data_neg, mz = is_info_mz_rt[, c("mzmin", "mzmax")],
     rt = is_info_mz_rt[, c("rtmin", "rtmax")],
     aggregationFun = "max")
 fData(is_chr) <- cbind(fData(is_chr),
                        is_info[, c("name", "abbreviation", "formula",
-                                   "POS", "RT")])
+                                   "NEG", "RT")])
 
 ## retention time and intensity matrices
 is_rt <- matrix(ncol = ncol(is_chr), nrow = nrow(is_chr),
@@ -674,13 +690,13 @@ between 0.5 and 0.7.
 ```{r export-eic-is, echo = FALSE, message = FALSE}
 dr <- paste0(IMAGE_PATH, "internal-standards/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
-sample_colors <- col_year_month[as.character(data_pos$year_month)]
+sample_colors <- col_year_month[as.character(data_neg$year_month)]
 for (i in seq_len(nrow(is_chr))) {
     fn <- paste0(dr, "IS-", gsub("%", "p", is_info$name[i], fixed = TRUE),
                  ".png")
     png(file = fn, width = 16, height = 10, units = "cm",
         res = 300, pointsize = 4)
-    par(mfrow = c(1, 2), mar = c(5, 4.2, 2, 0.5))
+    par(mfrow = c(2, 1), mar = c(5, 4.2, 2, 0.5))
     chr <- is_chr[i, ]
     pks <- chromPeaks(chr)
     plot(chr, col = "#00000040",
@@ -692,10 +708,10 @@ for (i in seq_len(nrow(is_chr))) {
     ## Indicate the selected peak position.
     points(is_rt[i, ], is_max[i, ], col = sample_colors)
     grid()
-    boxplot(log2(is_int), col = paste0(sample_colors, 80), las = 2,
+    boxplot(log2(is_int), col = paste0(sample_colors, 40), las = 2,
             names = chr$year_month, ylab = expression(log[2]~intensity))
-    points(x = seq_len(ncol(is_int)), log2(is_int[i, ]), pch = 16,
-           type = "o", cex = 1.5)
+    points(x = seq_len(ncol(is_int)), log2(is_int[i, ]), pch = 21,
+          cex = 1.5, bg = "red")
     grid()
     dev.off()
 }
@@ -713,7 +729,7 @@ signal performed above and aims at evaluating within and between-batch signals.
 par(mfrow = c(3, 1), mar = c(1, 4.5, 1, 1))
 boxplot(lapply(bpchr, function(z) log2(intensity(z))), outline = FALSE,
         ylab = expression(log[2]~base~peak~intensity), xaxt = "n",
-        main = "QC samples, positive polarity",
+        main = "QC samples, negative polarity",
         col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
 boxplot(log2(std_int), ylab = expression(log[2]~intensity), xaxt = "n",
@@ -724,7 +740,6 @@ boxplot(log2(is_int), ylab = expression(log[2]~intensity), xaxt = "n",
         main = "Internal standards",
         col = paste0(col_year_month[as.character(bpchr$year_month)], 40))
 grid(nx = NA, ny = NULL)
-
 ```
 
 Boxplot profiles look similar, with at least one problematic batch spotted across the whole selected data set
@@ -821,8 +836,7 @@ pandoc.table(
                      "to the total ion signal of a sample."))
 ```
 
-For most internal standards their intensity correlates with the total ion signal
-per sample. Exceptions are *Glycine*, *L-Proline*, *L-Alanine*, *L-Tyrosine* and *L-Cystine*.
+For most internal standards their intensity correlates with the total ion signal per sample. 
 
 
 ## Feature-wise analysis
@@ -878,7 +892,7 @@ variation in intensity.
 Next evaluate the per-feature variance in intensities (across samples).
 
 ```{r feature-int-boxplot, fig.path = IMAGE_PATH, fig.width = 9, fig.height = 7, fig.cap = "Per-feature intensity difference across the analyzed batches."}
-par(mar = c(9, 4.2, 1, 1))
+par(mfrow = c(1,1), mar = c(9, 4.2, 1, 1))
 boxplot(log2(t(std_int[idx_rt, ])), las = 2, ylab = "log2 intensity")
 grid(ny = NULL, nx = NA)
 ```
@@ -899,8 +913,12 @@ Again, no clear dependency is detectable. Thus, the variance in intensity seems
 to be feature specific, but not dependent on the total signal of the standard.
 
 As we have already seen in the previous section, for most standards the
-intensity follows the total ion signal of the sample (and hence batch). Only for
-a handful of features there was no such relationship. We are next trying to
+intensity follows the total ion signal of the sample (and hence batch). Only for a handful of features there was no such relationship. 
+
+
+# Problematic features (Code not updated from here)
+
+We are next trying to
 understand why these standards yield different intensities between batches. At
 first we evaluate the full scan at peak position for these standards in each
 sample. We thus extract next the full scan for each standard.
@@ -927,8 +945,8 @@ std_sp <- vector("list", nrow(std_info))
 names(std_sp) <- rownames(std_info)
 for (i in seq_along(std_sp)) {
     idx <- mapply(which_rt_file, std_rt_nona[i, ],
-                  seq_len(ncol(std_rt_nona)), MoreArgs = list(x = data_pos))
-    std_sp[[i]] <- Spectra(extractSpectraData(data_pos[idx]))
+                  seq_len(ncol(std_rt_nona)), MoreArgs = list(x = data_neg))
+    std_sp[[i]] <- Spectra(extractSpectraData(data_neg[idx]))
 }
 
 ```
@@ -947,7 +965,7 @@ i <- which(std_info$name == "Sphingosine")
 sps <- std_sp[[i]]
 
 adds <- mass2mz(std_info$mzneut[i],
-                adduct = adducts(polarity = "positive"))[[1]]
+                adduct = adducts(polarity = "negative"))[[1]]
 adds <- sort(adds[adds > 0 & adds < 1000])
 
 sps_adds <- filterMzValues(sps, mz = adds, ppm = 20)
@@ -992,7 +1010,7 @@ other and cluster them.
 
 ```{r sphingosine-spectra-correlation-heatmap, echo = FALSE, fig.path = IMAGE_PATH, fig.width = 11, fig.height = 10}
 cormat <- compareSpectra(sps_adds, ppm = 40)
-ann <- pData(data_pos)[, "year_month", drop = FALSE]
+ann <- pData(data_neg)[, "year_month", drop = FALSE]
 rownames(ann) <- rownames(cormat)
 ann$year_month <- factor(ann$year_month)
 library(pheatmap)
@@ -1013,7 +1031,7 @@ i <- which(std_info$name == "Inosine")
 sps <- std_sp[[i]]
 
 adds <- mass2mz(std_info$mzneut[i],
-                adduct = adducts(polarity = "positive"))[[1]]
+                adduct = adducts(polarity = "negative"))[[1]]
 adds <- sort(adds[adds > 0 & adds < 1000])
 
 sps_adds <- filterMzValues(sps, mz = adds, ppm = 20)
@@ -1045,7 +1063,7 @@ Plotting the full MS data for sample 12
 ```{r}
 ## maybe need to get spectra left and right of the current one?
 library(magrittr)
-tmp <- data_pos %>%
+tmp <- data_neg %>%
     filterFile(12) %>%
     filterRt(c(135, 155 )) %>%
     filterMz(c(290.02, 292.09))
@@ -1067,7 +1085,7 @@ And the same for sample 14
 ```{r}
 ## maybe need to get spectra left and right of the current one?
 library(magrittr)
-tmp <- data_pos %>%
+tmp <- data_neg %>%
     filterFile(14) %>%
     filterRt(c(135, 155 )) %>%
     filterMz(c(290.02, 292.09))
