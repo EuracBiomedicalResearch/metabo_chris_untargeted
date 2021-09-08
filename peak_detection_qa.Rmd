@@ -13,7 +13,7 @@ csl: biomed-central.csl
 ```{r biocstyle, echo = FALSE, results = "asis" }
 library(BiocStyle)
 BiocStyle::markdown()
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, dev = c("png", "pdf"))
 ```
 
 **Modified**: `r file.info("peak_detection_qa.Rmd")$mtime`<br />
@@ -68,7 +68,7 @@ library(RColorBrewer)
 library(MetaboCoreUtils)
 library(CompMetaboTools)
 
-register(bpstart(MulticoreParam(ncores, progressbar = TRUE)))
+register(bpstart(MulticoreParam(ncores - 1L)))
 
 load("data/RData/peak_detection/data_pos_ref.RData")
 blnk_pos <- filterFile(data_pos, file = which(data_pos$type == "BLANK"))

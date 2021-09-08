@@ -13,7 +13,7 @@ csl: biomed-central.csl
 ```{r biocstyle, echo = FALSE, results = "asis" }
 library(BiocStyle)
 BiocStyle::markdown()
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, dev = c("png", "pdf"))
 ```
 
 **Modified**: `r file.info("peak_detection.Rmd")$mtime`<br />
@@ -176,7 +176,7 @@ cwp <- CentWaveParam(
     noise = 100,
     integrate = 2)
 
-register(MulticoreParam(ncores))
+register(MulticoreParam(ncores - 1L))
 tm <- system.time(
     data_pos <- findChromPeaks(data_pos, param = cwp)
 )
@@ -227,7 +227,7 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
                            "retentionTime", "msLevel", "precursorScanNum",
                            "polarity", "centroided", "seqNum")
     )
-    register(MulticoreParam(ncores))
+    register(MulticoreParam(ncores - 1L))
     if (!file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))) {
         bpc_neg <- chromatogram(data_neg, aggregationFun = "max")
         save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
