@@ -28,6 +28,12 @@ The listing of all mzML files for CHRIS samples is provided in the
 is available through the Eurac Research IfB-internal *massspec* repository; ask
 Johannes Rainer for access).
 
+Analysis scripts are supposed to be run on the calculation cluster using the
+respective shell script (e.g. `peak_detection.sh` for `peak_detection.Rmd`). The
+script should then be executed with `sbatch --mem-per-cpu=24000 -c 10
+--partition=batch ./peak_detection.sh`.
+
+
 ### Preprocessing
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
