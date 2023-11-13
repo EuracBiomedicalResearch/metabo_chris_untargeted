@@ -28,16 +28,23 @@ The listing of all mzML files for CHRIS samples is provided in the
 is available through the Eurac Research IfB-internal *massspec* repository; ask
 Johannes Rainer for access).
 
+Analysis scripts are supposed to be run on the calculation cluster using the
+respective shell script (e.g. `peak_detection.sh` for `peak_detection.Rmd`). The
+script should then be executed with `sbatch --mem-per-cpu=24000 -c 10
+--partition=batch ./peak_detection.sh`.
+
+
 ### Preprocessing
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
   post-processing of both positive and negative polarity data.
-- [peak_detection_2020.Rmd](peak_detection_2020.Rmd): peak detection and peak
-  post-processing of CHRIS samples measured in 2020. Ultimately (once all
-  samples are measured), these files and samples will be integrated into the
-  *peak_detection.Rmd* file.
+- [peak_detection_qa.Rmd](peak_detection_qa.Rmd): quality assessment and
+  summaries for the peak detection step.
 
-
+TODO:
+- [ ] evaluate alignment on QC samples:
+  - check EICs before/after: are we able to *alleviate* the retention time
+    shifts caused by the LC maintenance in November 2021?
 
 ### Normalization
 

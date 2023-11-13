@@ -13,7 +13,7 @@ csl: biomed-central.csl
 ```{r biocstyle, echo = FALSE, results = "asis" }
 library(BiocStyle)
 BiocStyle::markdown()
-knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, dev = c("png", "pdf"))
 ```
 
 **Modified**: `r file.info("peak_detection.Rmd")$mtime`<br />
@@ -85,7 +85,7 @@ exclusion <- c("041016_BLANK_POS_1",
                "20161201_POOL_NEG_2.mzML")
 
 ## Get the number of cpus allocated or fall back to 3
-ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 5))
 
 rt_cut <- 340
 
@@ -136,7 +136,6 @@ data_pos <- readMSData(files = paste0(MZML_PATH, pd_pos$mzML_file),
                        pdata = as(AnnotatedDataFrame(pd_pos),
                                   "NAnnotatedDataFrame"),
                        mode = "onDisk")
-
 data_pos <- filterRt(data_pos, c(0, rt_cut))
 data_pos <- selectFeatureData(
     data_pos, fcol = c("fileIdx", "spIdx", "acquisitionNum", "retentionTime",
@@ -144,6 +143,21 @@ data_pos <- selectFeatureData(
                        "seqNum")
 )
 ```
+
+Before proceeding to the peak detection we extract base peak and total ion
+chromatograms.
+
+```{r bpc-pos, eval = !file.exists(paste0(RDATA_PATH, "bpc_pos.RData"))}
+bpc_pos <- chromatogram(data_pos, aggregationFun = "max")
+save(bpc_pos, file = paste0(RDATA_PATH, "bpc_pos.RData"))
+rm(bpc_pos)
+gc()
+tic_pos <- chromatogram(data_pos, aggregationFun = "sum")
+save(tic_pos, file = paste0(RDATA_PATH, "tic_pos.RData"))
+rm(tic_pos)
+gc()
+```
+
 
 # Peak detection and refinement
 
@@ -162,7 +176,7 @@ cwp <- CentWaveParam(
     noise = 100,
     integrate = 2)
 
-register(MulticoreParam(ncores))
+register(MulticoreParam(ncores - 1L))
 tm <- system.time(
     data_pos <- findChromPeaks(data_pos, param = cwp)
 )
@@ -185,8 +199,8 @@ mnp <- MergeNeighboringPeaksParam(
     ppm = 10,
     minProp = 0.66)
 
-## register(MulticoreParam(workers = ceiling(ncores * 2/3),
-##                         timeout = 86400L))
+register(MulticoreParam(workers = ceiling(ncores / 2),
+                        timeout = 86400L))
 tm <- system.time(
     data_pos <- refineChromPeaks(data_pos, param = mnp, BPPARAM = bpparam())
 )
@@ -213,7 +227,27 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
                            "retentionTime", "msLevel", "precursorScanNum",
                            "polarity", "centroided", "seqNum")
     )
-    ## register(MulticoreParam(ncores))
+    register(MulticoreParam(ncores - 1L))
+    if (!file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))) {
+        bpc_neg <- chromatogram(data_neg, aggregationFun = "max")
+        save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
+        rm(bpc_neg)
+        gc()
+    }
+    if (!file.exists(paste0(RDATA_PATH, "tic_neg.RData"))) {
+        tic_neg <- chromatogram(data_neg, aggregationFun = "sum")
+        save(tic_neg, file = paste0(RDATA_PATH, "tic_neg.RData"))
+        rm(tic_neg)
+        gc()
+    }
+    cwp <- CentWaveParam(
+        peakwidth = c(2, 20),
+        ppm = 50,
+        snthresh = 5,
+        mzdiff = 0.001,
+        prefilter = c(3, 500),
+        noise = 100,
+        integrate = 2)
     system.time(
         data_neg <- findChromPeaks(data_neg, param = cwp)
     )
@@ -221,9 +255,14 @@ if (!file.exists(paste0(RDATA_PATH, "data_neg.RData"))) {
 } else load(paste0(RDATA_PATH, "data_neg.RData"))
 
 if (!file.exists(paste0(RDATA_PATH, "data_neg_ref.RData"))) {
+    mnp <- MergeNeighboringPeaksParam(
+        expandRt = 2,
+        expandMz = 0.001,
+        ppm = 10,
+        minProp = 0.66)
     ## Peak refinement
-    ## register(MulticoreParam(workers = ceiling(ncores * 2/3),
-    ##                         timeout = 86400L))
+    register(MulticoreParam(workers = ceiling(ncores / 2),
+                            timeout = 86400L))
     tm <- system.time(
         data_neg <- refineChromPeaks(data_neg, param = mnp, BPPARAM = bpparam())
     )
@@ -241,11 +280,6 @@ chromatograms of QC samples and the number of identified chromatographic peaks
 across the whole data set. To this end we first extract the base peak
 chromatograms for the positive polarity data (the same code is used to
 create the BPC for negative polarity.
-
-```{r bpc-pos, eval = !file.exists(paste0(RDATA_PATH, "bpc_pos.RData"))}
-bpc_pos <- chromatogram(as(data_pos, "OnDiskMSnExp"), aggregationFun = "max")
-save(bpc_pos, file = paste0(RDATA_PATH, "bpc_pos.RData"))
-```
 
 ```{r bpc-pos-load, echo = FALSE}
 load(paste0(RDATA_PATH, "bpc_pos.RData"))
@@ -285,8 +319,8 @@ We also create base peak chromatograms separately for each plate (code and plots
 not shown here).
 
 ```{r pos-bpc-plate, echo = FALSE}
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
+col_type <- brewer.pal(7, "Set1")[c(2, 3, 5, 4)] # blue, green, orange, purple
+names(col_type) <- c("study", "QC", "BLANK", "QC_DIL")
 batches <- unique(bpc_pos$batch)
 dr <- paste0(IMAGE_PATH, "pos-per-batch/")
 dir.create(dr, showWarnings = FALSE, recursive = TRUE)
@@ -393,11 +427,6 @@ peaks, the intensity of the detected peaks is comparable across all batches.
 
 Next we create the same plots for negative polarity.
 
-```{r bpc-neg, eval = !file.exists(paste0(RDATA_PATH, "bpc_neg.RData"))}
-bpc_neg <- chromatogram(as(data_neg, "OnDiskMSnExp"), aggregationFun = "max")
-save(bpc_neg, file = paste0(RDATA_PATH, "bpc_neg.RData"))
-```
-
 ```{r bpc-neg-load, echo = FALSE}
 load(paste0(RDATA_PATH, "bpc_neg.RData"))
 ```
@@ -436,8 +465,6 @@ We also create base peak chromatograms separately for each plate (code and plots
 not shown here).
 
 ```{r neg-bpc-plate, echo = FALSE}
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
 batches <- unique(bpc_neg$batch)
 dr <- paste0(IMAGE_PATH, "neg-per-batch/")
 dir.create(dr, showWarnings = FALSE, recursive = TRUE)
@@ -462,8 +489,6 @@ for (batch in batches) {
 
 ```{r neg-peaks-per-file, fig.path = IMAGE_PATH, caption = "Negative polarity data: peak count and signal distribution per sample.", fig.width = 16, fig.height = 10, echo = FALSE}
 
-col_type <- brewer.pal(7, "Set1")[c(2, 3, 5)] # blue, green, orange
-names(col_type) <- c("study", "QC", "BLANK")
 
 intos <- split(log2(chromPeaks(data_neg)[, "into"]),
                f = as.integer(chromPeaks(data_neg)[, "sample"]))

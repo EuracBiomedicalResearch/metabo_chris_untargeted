@@ -1,0 +1,493 @@
+---
+title: "CHRIS untargeted metabolomics: alignment and correspondence analysis"
+author: "Johannes Rainer"
+output:
+  BiocStyle::html_document:
+    toc: true
+    number_sections: false
+    toc_float: true
+bibliography: references.bib
+csl: biomed-central.csl
+---
+
+```{r biocstyle, echo = FALSE, results = "asis" }
+library(BiocStyle)
+BiocStyle::markdown()
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, dev = c("png", "pdf"))
+```
+
+**Modified**: `r file.info("alignment_correspondence.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r settings, echo = FALSE}
+## Set general options
+options(useFancyQuotes = FALSE)
+set.seed(123)
+
+## Define paths:
+FILE_NAME <- "alignment_correspondence"
+## Path to save the images; remove all old images.
+IMAGE_PATH <- paste0("images/", FILE_NAME, "/")
+if (dir.exists(IMAGE_PATH)) unlink(IMAGE_PATH, recursive = TRUE, force = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
+## Path to store RData files
+RDATA_PATH <- paste0("data/RData/", FILE_NAME, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+## Get the number of cpus allocated or fall back to 3
+ncores <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 6))
+
+rt_cut <- 340
+
+MZML_PATH <- "/data/massspec/mzML/"
+if (!dir.exists(MZML_PATH))
+    stop("Can not find the directory with the mzML files: ", MZML_PATH)
+
+```
+
+- Test first all on *just* the QC samples.
+- perform alignment
+  - subset alignment based on QC samples: QC samples get aligned against each
+    other and then study samples get aligned against QC samples.
+- perform correspondence
+- plot EICs for standards in:
+  - x random samples
+  - 2 QC samples per batch
+- peak filling
+
+# Introduction
+
+This document describes the alignment and correspondence analysis of the
+HILIC-based untargeted metabolomics data from the CHRIS population study.
+
+In a first pilot analysis alignment and correspondence is performed *only* on
+the QC samples of the study.
+
+The chromatographic peak detection was defined in and performed by the
+[peak_detection.Rmd](peak_detection.Rmd) file.
+
+Below we load the data and all required libraries.
+
+```{r libs}
+library(xcms)
+
+register(bpstart(MulticoreParam(ncores - 1L)))
+
+load("data/RData/peak_detection/data_pos.RData")
+dr <- dirname(data_pos)
+dirname(data_pos) <- sub("/Volumes/extdata/data/mzML/",
+                         "/data/massspec/mzML/", dr)
+
+data_qc <- filterFile(data_pos, which(data_pos$type == "QC"))
+```
+
+
+# Lab-internal standards
+
+We next load the lab-internal standards. EICs on these will be used to evaluate
+the raw data as well as the alignment and correspondence results.
+
+```{r stds}
+## Extract known compunds
+library("MetaboCoreUtils")
+library(Rdisop)
+std_info <- read.table(
+    "https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
+    sep = "\t", header = TRUE, as.is = TRUE)
+std_info <- std_info[!is.na(std_info[, "POS"]), ]
+rownames(std_info) <- 1:nrow(std_info)
+std_info$mzneut = NA
+std_info$mz_ion = NA
+for (i in seq(nrow(std_info))) {
+    if (grepl("C", std_info$formula[i])) {
+        std_info$mzneut[i] <- getMolecule(
+            as.character(std_info$formula[i]))$exactmass
+    } else {
+        std_info$mzneut[i] = as.numeric(std_info$formula[i])
+    }
+    ## Calculate also the m/z
+    std_info$mz_ion[i] <- mass2mz(
+        std_info$mzneut[i], adduct = std_info[i, "POS"])[1, 1]
+}
+std_info <- std_info[!is.na(std_info$mz_ion), ]
+std_info <- std_info[order(std_info$name), ]
+```
+
+
+# Alignment
+
+Due to the large shifts in the retention times, alignment (using the default
+settings for our LC-MS setup) did not work properly. Thus we try to align the
+batches first using a manually selected set of standards and their retention
+times in QC samples across batches.
+
+```{r}
+std_selected <- c(
+    "1-Methylhistidine",                # and 3-Methylhistidine
+    "8-Oxo-2-Deoxyguanosine",
+    "Acetylhistidine",
+    "Adenine",
+    "ADMA",
+    "Alanine",
+    "Arginine",
+    "Asparagine",
+    ## "Betaine",                          # no clear, single peak.
+    "C5 Carnitine",
+    "Caffeine",
+    "cGMP",
+    "Citrulline",
+    "Creatine",
+    "Cystine",
+    "Dihydroxyacetone phosphate",
+    "Fructose",
+    "Glutamine",
+    "Glyceraldehyde 2-phosphate",
+    "Glycero-phosphocholine",
+    "Glycine",
+    "Histidine",
+    "Hydroxyproline",
+    "Hypoxanthine",                     # take the second peak
+    "Indoleacetic acid",
+    "Inosine",
+    "L-Glutamic Acid",
+    "Lysine",
+    "Methionine",
+    "N-Acetylornithine",
+    "Ornithine",
+    "Proline",
+    "Putrescine",
+    "SDMA",
+    "Serine",
+    "Sphingosine",
+    "Taurine",
+    "Threonine"
+)
+
+std_rt <- std_info[std_info$name %in% std_selected, ]
+
+```
+
+We next identify chromatographic peaks for each of these standards and plot
+EICs.
+
+```{r match-standards}
+library(MetaboAnnotation)
+param <- MzRtParam(tolerance = 0, ppm = 20, toleranceRt = 50) # rt 40 before
+std_peaks <- matchMz(std_rt, chromPeaks(data_qc), param = param,
+                     mzColname = c("mz_ion", "mz"),
+                     rtColname = c("RT", "rt"))
+std_peaks <- std_peaks[whichQuery(std_peaks)]
+std_rt <- query(std_peaks)
+
+## For each standard, define m/z and rt ranges.
+std_rt_mz <- do.call(rbind, lapply(seq_along(std_peaks), function(z) {
+    tmp <- std_peaks[z]
+    c(range(tmp$target_rtmin, tmp$target_rtmax),
+      range(tmp$target_mzmin, tmp$target_mzmax))
+}))
+colnames(std_rt_mz) <- c("rtmin", "rtmax", "mzmin", "mzmax")
+
+system.time(
+    std_chr <- chromatogram(data_qc, rt = std_rt_mz[, c("rtmin", "rtmax")],
+                            mz = std_rt_mz[, c("mzmin", "mzmax")])
+)
+
+```
+
+```{r raw-eic-plots, echo = FALSE}
+#' Plot EICs only for a single batch.
+plot_single_sample <- function(x, col = "#00000060", rt = 0) {
+    par(mfrow = c(ncol(x), 1), mar = c(2, 4, 1, 0.5))
+    smpl <- basename(x$mzML_file)
+    for (i in seq_len(ncol(x))) {
+        tmp <- x[, i]
+        plot(tmp, main = smpl[i], col = col, peakCol = col,
+             peakBg = paste0(col, 20))
+        abline(v = rt, lty = 2)
+        abline(v = chromPeaks(tmp)[, "rt"], col = col)
+        grid()
+        legend("topright", legend = i, cex = 2)
+    }
+}
+
+plot_split_batch <- function(x, col, name = "", rt = 0) {
+    btches <- unique(x$batch)
+    par(mfrow = c(length(btches), 1), mar = c(0, 4, 0, 0.5))
+    for (btch in btches) {
+        plot(x[, x$batch == btch], col = col[btch], xlab = "", main = "",
+             yaxt = "n", ylab = "", col.axis = "#00000060",
+             peakType = "none")
+        abline(v = rt, lty = 2)
+        grid()
+        legend("topright", btch)
+    }
+}
+
+col_batch <- rainbow(length(unique(data_qc$batch)))
+names(col_batch) <- unique(data_qc$batch)
+col_sample <- col_batch[data_qc$batch]
+dr <- paste0(IMAGE_PATH, "standards-alignment-raw/")
+dir.create(dr, showWarnings = FALSE)
+
+rt_assign <- data.frame()
+
+for (i in seq_len(nrow(std_rt))) {
+    ## Overview plot
+    pdf(paste0(dr, std_rt$name[i], "-all-batches.pdf"), width = 8, height = 5)
+    chr <- std_chr[i, ]
+    plot(chr, col = paste0(col_sample, 80), peakType = "point",
+         peakCol = paste0(col_sample[chromPeaks(chr)[, "sample"]], 40))
+    grid()
+    abline(v = std_rt$RT[i], lty = 2)
+    legend("topright", c(std_rt$name[i], paste0("rt = ", std_rt$RT[i])))
+    dev.off()
+    ## One plot, split by batch
+    pdf(paste0(dr, std_rt$name[i], "-per-batch.pdf"), width = 8, height = 30)
+    plot_split_batch(chr, col = col_batch, name = std_rt$name[i],
+                     rt = std_rt$RT[i])
+    dev.off()
+    ## Individual samples, one plot per batch
+    dir.create(paste0(dr, std_rt$name[i]), showWarnings = FALSE)
+    for (batch in names(col_batch)) {
+        pdf(paste0(dr, std_rt$name[i], "/", batch, ".pdf"), width = 8,
+            height = 10)
+        chr_batch <- chr[, chr$batch == batch]
+        plot_single_sample(chr_batch, col = col_batch[batch],
+                           rt = std_rt$RT[i])
+        dev.off()
+        ## define data.frame to export
+        fls <- basename(pData(chr_batch)$mzML_file)
+        rt_batch <- data.frame(name = std_rt$name[i], batch = batch,
+                               index = seq_along(fls), rt = 0,
+                               mzML_file = fls)
+        pks <- chromPeaks(chr_batch)
+        if (nrow(pks)) {
+            add_tmp <- data.frame(name = std_rt$name[i], batch = batch,
+                                  index = pks[, "column"], rt = pks[, "rt"],
+                                  mzML_file = fls[pks[, "column"]])
+            rt_batch <- rbind(rt_batch[!rt_batch$index %in% add_tmp$index, ],
+                            add_tmp)
+            rt_batch <- rt_batch[order(rt_batch$index), ]
+        }
+        rt_assign <- rbind(rt_assign, rt_batch)
+    }
+}
+
+library(writexl)
+write_xlsx(as.data.frame(rt_assign), path = "data/_temp_alignment_rt.xlsx")
+
+## Continue with cGMP
+## Notes:
+## - Alanine, batches 2017-20 and 2017-22: shifts in the same 2 positions.
+## - Alanine: batches 2020_10, 2020_11, 2020_14, 2020_15 long tails
+## - Arginine: 2020_21 10 sec shift left.
+## - Asparagine: 2020_18 -> 10 sec shift left.
+## - C5 Carnitine: 2020_19 -> looking at wrong ion? large shift left;
+##   2017-91, 92, many overlapping peaks
+```
+
+- Notes for peak detection: lower snthresh or minimum required signal. merge
+  peaks: maybe increase rt range?
+
+Alignment is performed on the pooled QC samples using the default settings for
+the employed LC-MS setup.
+
+```{r alignment, echo = TRUE, message = FALSE}
+## Grouping the peaks according to group
+pdp_subs <- PeakDensityParam(
+    sampleGroups = data_pos$type, bw = 3,
+    minFraction = 0.8, binSize = 0.02, maxFeatures = 200)
+data_pos <- groupChromPeaks(data_pos, param = pdp_subs)
+## Subset alignment options
+pgp_subs <- PeakGroupsParam(minFraction = 2/3,
+                            subset = which(data_pos$type == "QC"),
+                            subsetAdjust = "previous", span = 0.5,
+                            extraPeaks = 100)
+## Perform the alignment
+system.time(
+    data_pos <- adjustRtime(data_pos, param = pgp_subs)
+)
+save(data_pos, file = paste0(RDATA_PATH, "data_pos_align.RData"))
+```
+
+We next plot the retention times for the selected *hook peaks*.
+
+```{r alignment-hook-peak-rt, fig.path = IMAGE_PATH, fig.cap = "Retention times of hook peaks across the various QC samples.", echo = FALSE}
+load(paste0(RDATA_PATH, "data_pos_align.RData"))
+
+data_qc <- filterFile(data_pos, which(data_pos$type == "QC"))
+## Define a color for each batch.
+col_batch <- rainbow(length(unique(data_qc$batch)))
+names(col_batch) <- unique(data_qc$batch)
+## Plot the hook peaks
+pgm <- peakGroupsMatrix(processParam(data_qc@.processHistory[[3]]))
+
+plot(3, 3, pch = NA, xlim = range(pgm, na.rm = TRUE), ylim = c(1, nrow(pgm)),
+     xlab = "retention time", ylab = "peak number")
+for (i in seq_len(nrow(pgm))) {
+    points(x = pgm[i, ], y = rep(i, ncol(pgm)),
+           col = paste0(col_batch[data_qc$batch], 10), pch = 16)
+}
+grid()
+
+```
+
+Hook peaks are mostly present at around 30 seconds as well as after 150 (up to
+220) seconds. Retention time shifts become larger with higher retention
+times. The mean retention time range is `r format(mean(apply(pgm, MARGIN = 1, function(z) diff(range(z, na.rm = TRUE)))), digits = 3)`.
+
+We next plot the retention time differences for QC samples.
+
+```{r alignment-adjustrtime-plot, fig.path = IMAGE_PATH, fig.cap = "Alignment results", echo = FALSE}
+tmp <- data_qc
+tmp@.processHistory <- list()
+plotAdjustedRtime(tmp, col = paste0(col_batch[tmp$batch], 20))
+```
+
+Matching identified chromatographic peaks with standards to create EIC plots.
+
+```{r known-cmps, message = FALSE, warning = FALSE}
+
+library(MetaboAnnotation)
+param <- MzRtParam(tolerance = 0, ppm = 20, toleranceRt = 40)
+std_peaks <- matchMz(std_info, chromPeaks(data_qc), param = param,
+                     mzColname = c("mz_ion", "mz"),
+                     rtColname = c("RT", "rt"))
+std_peaks <- std_peaks[whichQuery(std_peaks)]
+std_info <- query(std_peaks)
+
+## For each standard, define m/z and rt ranges.
+std_rt_mz <- do.call(rbind, lapply(seq_along(std_peaks), function(z) {
+    tmp <- std_peaks[z]
+    c(range(tmp$target_rtmin, tmp$target_rtmax),
+      range(tmp$target_mzmin, tmp$target_mzmax))
+}))
+colnames(std_rt_mz) <- c("rtmin", "rtmax", "mzmin", "mzmax")
+
+system.time(
+std_chr <- chromatogram(data_qc, rt = std_rt_mz[, c("rtmin", "rtmax")],
+                        mz = std_rt_mz[, c("mzmin", "mzmax")],
+                        adjustedRtime = TRUE)
+)
+system.time(
+    std_chr_raw <- chromatogram(dropAdjustedRtime(data_qc),
+                                rt = std_rt_mz[, c("rtmin", "rtmax")],
+                                mz = std_rt_mz[, c("mzmin", "mzmax")])
+)
+
+## Plot these friends
+
+
+
+
+dr <- paste0(IMAGE_PATH, "standards-alignment-aligned/")
+dir.create(dr, showWarnings = FALSE)
+history <- processHistory(data_pos)
+save(history, file = paste0(dr, "history.RData"))
+for (i in seq_len(nrow(std_info))) {
+    pdf(paste0(dr, std_info$name[i], "-all-batches.pdf"), width = 8, height = 5)
+    chr <- std_chr[i, ]
+    plot(chr, col = paste0(col_sample, 80), peakType = "point",
+         peakCol = paste0(col_sample[chromPeaks(chr)[, "sample"]], 40))
+    grid()
+    abline(v = std_info$RT[i], lty = 2)
+    legend("topright", c(std_info$name[i], paste0("rt = ", std_info$RT[i])))
+    dev.off()
+    pdf(paste0(dr, std_info$name[i], "-per-batch.pdf"), width = 8, height = 30)
+    plot_batch(chr, col = col_batch, name = std_info$name[i],
+               rt = std_info$RT[i])
+    dev.off()
+}
+
+dr <- paste0(IMAGE_PATH, "standards-alignment-raw/")
+dir.create(dr, showWarnings = FALSE)
+for (i in seq_len(nrow(std_info))) {
+    pdf(paste0(dr, std_info$name[i], "-all-batches.pdf"), width = 8, height = 5)
+    chr <- std_chr_raw[i, ]
+    plot(chr, col = paste0(col_sample, 80), peakType = "point",
+         peakCol = paste0(col_sample[chromPeaks(chr)[, "sample"]], 40))
+    grid()
+    abline(v = std_info$RT[i], lty = 2)
+    legend("topright", c(std_info$name[i], paste0("rt = ", std_info$RT[i])))
+    dev.off()
+    pdf(paste0(dr, std_info$name[i], "-per-batch.pdf"), width = 8, height = 30)
+    plot_batch(chr, col = col_batch, name = std_info$name[i],
+               rt = std_info$RT[i])
+    dev.off()
+}
+
+## Manually selected standards with ~ OK (and unambiguous) data.
+std_selected <- c(
+    "1-Methylhistidine",                # and 3-Methylhistidine
+    "8-Oxo-2-Deoxyguanosine",
+    "Acetylhistidine",
+    "Adenine",
+    "ADMA",
+    "Alanine",
+    "Arginine",
+    "Asparagine",
+    "Betaine",
+    "C5 Carnitine",
+    "Caffeine",
+    "cGMP",
+    "Citrulline",
+    "Creatine",
+    "Cystine",
+    "Dihydroxyacetone phosphate",
+    "Fructose",
+    "Glutamine",
+    "Glyceraldehyde 2-phosphate",
+    "Glycero-phosphocholine",
+    "Glycine",
+    "Histidine",
+    "Hydroxyproline",
+    "Hypoxanthine",                     # take the second peak
+    "Indoleacetic acid",
+    "Inosine",
+    "L-Glutamic Acid",
+    "Lysine",
+    "Methionine",
+    "N-Acetylornithine",
+    "Ornithine",
+    "Proline",
+    "Putrescine",
+    "SDMA",
+    "Serine",
+    "Sphingosine",
+    "Taurine",
+    "Threonine"
+)
+
+
+```
+
+TODO:
+- select standards with the potential to yield ~ OK signal.
+- for selected standards, record their rt in QC samples of each batch.
+- Need to plot the data separately for each batch, each QC sample to record it.
+- Ideally, determine the retention time for matching peaks per sample, export as
+  xlsx and manually adjust/fix them.
+
+
+
+# Correspondence
+
+We next perform the correspondence analysis on the aligned data.
+
+```{r}
+pdp <- PeakDensityParam(
+    sampleGroups = data_pos$type, bw = 2,
+    minFraction = 0.3, binSize = 0.02, maxFeatures = 200)
+data_pos <- groupChromPeaks(data_pos, param = pdp)
+```
+
+# Gap filling
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+
+# References
