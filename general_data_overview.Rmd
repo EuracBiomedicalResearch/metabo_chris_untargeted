@@ -1,0 +1,93 @@
+---
+title: "General data overview and quality assessment of the CHRIS untargeted metabolomics data"
+author: "Marilyn De Graeve, Johannes Rainer"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+---
+
+**Modified**: `r file.info("general_data_overview.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r biocstyle, echo = FALSE, results = "hide", message = FALSE}
+#' rmarkdown format settings
+library(BiocStyle)
+library(knitr)
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 10, fig.height = 7)
+BiocStyle::markdown()
+```
+
+```{r settings, echo = FALSE}
+#' General settings
+filename <- " general_data_overview"
+#' Path to save images to; remove if exists.
+IMAGE_PATH <- paste0("images/", filename, "/")
+if (file.exists(IMAGE_PATH))
+    unlink(IMAGE_PATH, recursive = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE)
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+```
+
+# Introduction
+
+In this document we provide a general overview of the CHRIS untargeted
+metabolomics data. HILIC-based LC-MS data was measured for about 7,000 serum
+samples from the CHRIS study over the time span of about 5 years. In each batch
+(which corresponds to one 96 well plate) data from 80 study samples and a sample
+pool (QC POOL) was acquired. The same QC sample pool was measured in each plate,
+always after 8 study samples.
+
+# General data overview and initial quality assessment
+
+The untargeted metabolomics data is stored within a *SQLite* database that we
+load below using the `r Biocpkg("MsBackendSql")` package.
+
+```{r}
+#' Load libraries
+library(MsExperiment)
+library(Spectra)
+library(MsBackendSql)
+library(RSQLite)
+library(xcms)
+library(pheatmap)
+library(MsQuality)
+
+#' Get access to the SQLite database.
+s <- Spectra("data/chris_hilic_pos_1.0.0.2.sqlite",
+             source = MsBackendOfflineSql(),
+             drv = SQLite())
+#' Load the data as an MsExperiment
+chris <- MsExperiment(spectra = s)
+```
+
+
+## General overview
+
+- Overview of batches: number of samples (study, QC) per batch. Date when batch
+  was created etc. use `sampleData(chris)` for that.
+- Total number of study samples, are there replicated study samples? note: some
+  plates were repeated because of failures or problems, maybe also check if the
+  data is there.
+
+## Initial quality assessment
+
+- maybe have a look at the `MsQuality` Bioconductor package to use one of the
+  pre-defined quality metrics?
+- check problematic or failed samples (low number of spectra? restricted
+  retention time range?).
+- maybe BPC or TIC (of only QC samples) of the data set, different colors per
+  batch.
+- heatmap comparing BPCs.
+- boxplots with distribution of
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```
