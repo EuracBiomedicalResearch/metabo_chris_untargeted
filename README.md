@@ -5,28 +5,21 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 
 ## Contact persons
 
-- Mar Garcia-Aloy
+- Marilyn De Graeve
 - Johannes Rainer
 
-## Requirements
+## Previous contributors
 
-A recent version of R is required (>= 4.0) and the following R packages:
+- Vinicius Verri Hernandes
+- Mar Garcia-Aloy
 
-```r
-install.packages("BiocManager")
-## For the peak_detection.Rmd
-BiocManager::install(c("BiocStyle",
-                       "readxl",
-                       "RColorBrewer",
-                       "xcms"))
-```
 
 ## Files and structure of the analysis
 
-The listing of all mzML files for CHRIS samples is provided in the
-*data/chris-files-annotated.xlsx* which is not included in this repository (it
-is available through the Eurac Research IfB-internal *massspec* repository; ask
-Johannes Rainer for access).
+The MS data is provided as a self-contained SQL database that also contains
+sample annotations (batch IDs etc). The data can be loaded as a `MsExperiment`
+object through the
+[`MsBackendSql`](https://github.com/RforMassSpectrometry/MsBackendSQl) package.
 
 Analysis scripts are supposed to be run on the calculation cluster using the
 respective shell script (e.g. `peak_detection.sh` for `peak_detection.Rmd`). The
@@ -34,7 +27,16 @@ script should then be executed with `sbatch --mem-per-cpu=24000 -c 10
 --partition=batch ./peak_detection.sh`.
 
 
+### General data overview
+
+- [general_data_overview.Rmd](general_data_overview.Rmd): general overview and
+  summary statistics as well as initial quality assessment of the whole data
+  set.
+
+
 ### Preprocessing
+
+-- NEEDS TO BE UPDATED AND FIXED --
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
   post-processing of both positive and negative polarity data.
