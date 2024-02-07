@@ -83,7 +83,7 @@ chris <- MsExperiment(spectra = s)
 - maybe BPC or TIC (of only QC samples) of the data set, different colors per
   batch.
 - heatmap comparing BPCs.
-- boxplots with distribution of
+- boxplots with distribution of ??
 
 
 # Session information
