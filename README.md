@@ -5,7 +5,7 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 
 ## Contact persons
 
-- Marilyn De Graeve
+- Marilyn De Graeve 
 - Johannes Rainer
 
 ## Previous contributors
