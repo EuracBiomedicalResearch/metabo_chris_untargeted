@@ -68,8 +68,26 @@ BiocManager::install(c("BiocStyle",
                        "UpSetR",
                        "pheatmap",
                        "SummarizedExperiment",
-                       "writexl"))
+                       "MsExperiment",
+                       "Spectra",
+                       "MetaboCoreUtils",
+                       "MsBackendSql",
+                       "MsQuality",
+                       "writexl",
+                       "ProtGenerics",
+                       "MsCoreUtils",
+                       "MetaboAnnotation"))
 
+install.packages(c("tidyverse",
+                   "readxl",
+                   "readr",
+                   "RSQLite",
+                   "rmarkdown",
+                   "kableExtra",
+                   "magick"))
+
+                 
+                 
 ```
 
 ## Raw mzML data
