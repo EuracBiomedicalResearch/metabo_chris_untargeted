@@ -192,7 +192,7 @@ There are `r length(unique(df$batch_id))` batches in the dataset.
 During one batch, representing one day of analysis, there were approximately 80 biological samples (sample type == Study) and 10 pooled QCs run. The batch starts and ends with internal QCs, in between each set of 8 consecutive study samples, a QC was included. In one batch (batch0110), POOL 1 -> POOL 10 were named POOL 12 -> POOL 102, respectively. The order of the samples however remained the same.
 Question? The biological name in the 'file_name' and 'sample_id' didn't match for this batch.
 
-For some of the later batches, blank samples (solvent?), QC Cal (??), and QC ISDil (pooled QC with diluted internal standard ??) samples were added as well. The analysis of the metabo_chris_untarget dataset took place over 4 years, with data generated in 2016, 2017, 2020 and 2021.
+For some of the later batches, blank samples (solvent?), QC Cal (??), and QC ISDil (pooled QC with diluted internal standard ??) samples were added as well. The analysis of the metabo_chris_untarget dataset took place over 5 years, with data generated in 2016, 2017, 2020 and 2021.
 
 For a summary of nr of pooled QC (Pool) and biological (Study) samples, see the table above. 
 
