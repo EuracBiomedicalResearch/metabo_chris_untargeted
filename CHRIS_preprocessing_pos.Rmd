@@ -1,0 +1,78 @@
+---
+title: "CHRIS preprocessing posititve mode"
+author: "Marilyn De Graeve, Philippine Louail, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-02-28"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+bibliography: references.bib
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+**Modified**: `r file.info("CHRIS_preprocessing_pos.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+
+library("BiocStyle")
+library("kableExtra")
+library("knitr")
+suppressMessages(library("rmarkdown"))
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, time_it = TRUE)
+```
+
+# Introduction
+
+During this workflow, the preprocessing (PP) of the untargeted metabolomics data of the Cooperative Health Research in South Tirol (CHRIS) study is performed. For a description of the study, methods used for the collection, handling and aqcuisition of the liquid chromatography-mass spectrometry (LC-MS) samples, please see [@verri_hernandes_age_2022]. Samples are aquired in both positive and negative ionization mode, for which the PP of the positive (pos) mode will be performed in this Rmarkdown document.
+
+# Packages
+
+```{r packages, message=FALSE}
+suppressMessages(library(magick))
+suppressMessages(library(MetaboAnnotation))
+library(MetaboCoreUtils)
+library(MsBackendSql)
+suppressMessages(library(MsExperiment))
+library(MsQuality)
+library(pander)
+library(pheatmap)
+library(RColorBrewer)
+library(readxl)
+library(RSQLite)
+suppressMessages(library(Spectra))
+suppressMessages(library(SummarizedExperiment))
+suppressMessages(library(vioplot))
+suppressMessages(library(xcms))
+```
+
+
+
+# Session information
+
+```{r}
+sessionInfo()
+```
+
+# References
+
