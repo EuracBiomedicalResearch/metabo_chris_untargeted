@@ -6,8 +6,8 @@ output:
   BiocStyle::html_document:
     toc_float: true
     code_folding: hide
-editor_options: 
-  markdown: 
+editor_options:
+  markdown:
     wrap: 72
 ---
 
@@ -42,7 +42,8 @@ dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
 
 # Introduction
 
-In this document we provide a general overview of the untargeted metabolomics data of the Cooperative Health Research in South Tirol (CHRIS) study. 
+In this document we provide a general overview of the untargeted metabolomics
+data of the Cooperative Health Research in South Tirol (CHRIS) study.
 HILIC-based LC-MS data was measured for about 7,000 serum
 samples from the CHRIS study over the time span of about 5 years. In each batch
 (which corresponds to one 96 well plate) data from 80 study samples and a sample
@@ -52,11 +53,11 @@ always after 8 study samples.
 
 # General import and exploration
 
-In the code block below we first load all required libraries and define the location 
-of the data.
+In the code block below we first load all required libraries and define the
+location of the data.
 The untargeted metabolomics data is stored within a *SQLite* database that we
-load below using the `r Biocpkg("MsBackendOfflineSql")` argument of the 
-`r Biocpkg("MsBackendSql")` package, included in the `r Biocpkg("Spectra")` function. 
+load below as a `Spectra` object using the `MsBackendOfflineSql` *backend*
+provided by the `r Biocpkg("MsBackendSql")` package.
 
 A sniplet of the Spectra object, the summary and columnames are shown below.
 
@@ -74,30 +75,30 @@ library(readr)
 library(readxl)
 library(magick)
 
-#set path
-DATA_PATH <- '/media/mdegraeve/josung/data' 
+#' set path
+DATA_PATH <- 'data'
 
-# Other metabo_chris data, currently not used
-handle <- paste0(DATA_PATH,'/', 'stds_biocrates.csv')
+#' Other metabo_chris data, currently not used
+handle <- file.path(DATA_PATH, 'stds_biocrates.csv')
 stds_biocrates <- read_csv(handle, show_col_types = FALSE)
 #head(stds_biocrates,5)
 #colnames(stds_biocrates)
 
-handle <- paste0(DATA_PATH,'/','chris_hilic_logbook.xlsx')
+handle <- file.path(DATA_PATH, 'chris_hilic_logbook.xlsx')
 chris_hilic_logbook <- read_excel(handle)
 #head(chris_hilic_logbook,5)
 #colnames(chris_hilic_logbook)
 
 #' Get access to the SQLite database.
-handle <- paste0(DATA_PATH,'/', 'chris_hilic_pos_1.0.0.2.sqlite')
+handle <- file.path(DATA_PATH, 'chris_hilic_pos_1.0.0.2.sqlite')
 s <- Spectra(handle,
              source = MsBackendOfflineSql(),
              drv = SQLite())
 
-# info about structure S4 'Spectra' object     
+# info about structure S4 'Spectra' object
 s
 summary(s)
-#str(s)    
+#str(s)
 
 # colnames of spectra object
 spectraVariables(s)
@@ -112,14 +113,17 @@ spectraVariables(s)
 
 ```
 
-To summarize, one MS-level (`r unique(s$msLevel)`) is present, 1 polarity mode (`r unique(s$polarity)`). 
-The RT time ranges from `r min(s$rtime)` - `r max(s$rtime)` seconds, 
-so an LC-MS method of approx `r round((max(s$rtime) - min(s$rtime))/60, 0)` min was applied.
+To summarize, one MS-level (`r unique(s$msLevel)`) is present, 1 polarity mode
+(`r unique(s$polarity)`).
+The RT time ranges from `r min(s$rtime)` - `r max(s$rtime)` seconds,
+so an LC-MS method of approx `r round((max(s$rtime) - min(s$rtime))/60, 0)` min
+was applied.
 The scanIndex goes up to `r max(s$scanIndex)` scans.
 
 
-The MS data (spectra) are loaded as an `r Biocpkg("MsExperiment")` object to view the chraracteristics 
-of the experiment, i.e. of the Chris dataset.
+The MS data (spectra) are next loaded as an `r Biocpkg("MsExperiment")` object,
+which retrieves also the sample annotations for the data set from the SQL
+database.
 The `MsExperiment` object `chris` manages the *linkage* between samples and
 spectra. The `length` of an `MsExperiment` is defined by the number of
 samples (files) within the object.
@@ -137,9 +141,10 @@ chris
 
 ```
 
-So, there are `r length(chris)` samples and approx `r formatC(length(s), format = "e", digits = 2)` MS1 spectra in the chris dataset.
-
- 
+So, there are `r length(chris)` samples and approx
+`r formatC(length(s), format = "e", digits = 2)` MS1 spectra in the chris
+dataset. Still, the size of the data set in memory is only
+`r print(object.size(chris), units = "MB")`
 
 
 ## General data overview
@@ -148,10 +153,11 @@ So, there are `r length(chris)` samples and approx `r formatC(length(s), format 
 
 - Overview of batches: number of samples (study, QC) per batch. Date when batch
   was created etc. use `sampleData(chris)` for that.
-  
 
-```{r sampleData(chris) batches, echo = FALSE}
-df <- sampleData(chris)
+
+```{r sampleData(chris) batches, results = "asis"}
+df <- sampleData(chris) |>
+    as.data.frame()
 #head(df,5)
 #ncol(df)
 #nrow(df)
@@ -163,38 +169,45 @@ df <- sampleData(chris)
 
 #for each batch, count the bio and pool (and other sample types)
 i <- 1
-df3 <- NULL
+df3 <- data.frame()
 
-for(i in 1:length(unique(df$batch_id)) ){
+for (i in 1:length(unique(df$batch_id))) {
     #print(i)
     df2 <- NULL
     df2$batch_id <- unique(df$batch_id)[i]
     df_batch <- df[df$batch_id == unique(df$batch_id)[i], ]
-    df2$date <- paste(df_batch$year[i], df_batch$month[i], df_batch$day[i], sep='-')
+    df2$date <- paste(df_batch$year[i], df_batch$month[i],
+                      df_batch$day[i], sep='-')
     df2$nr_Pool <- nrow(df_batch[df_batch$sample_type == 'Pool', ])
     df2$nr_Study <- nrow(df_batch[df_batch$sample_type == 'Study', ])
-    
+    df2$plate_id <- df_batch$plate[1L]
+
     df3 <- rbind(df3, df2)
     }
 
 rownames(df3) <- c(1:nrow(df3))
 #print(df3)
 
-#nice print
-kable_input <- kable(df3)
+kable_input <- kable(df3, caption = "Overview over batches and plates")
 kable_styling(kable_input, latex_options= c("scale_down", "hold_position"))
-
 
 ```
 
-There are `r length(unique(df$batch_id))` batches in the dataset. 
+There are `r length(unique(df$batch_id))` batches in the dataset.
 
 During one batch, representing one day of analysis, there were approximately 80 biological samples (sample type == Study) and 10 pooled QCs run. The batch starts and ends with internal QCs, in between each set of 8 consecutive study samples, a QC was included. In one batch (batch0110), POOL 1 -> POOL 10 were named POOL 12 -> POOL 102, respectively. The order of the samples however remained the same.
 Question? The biological name in the 'file_name' and 'sample_id' didn't match for this batch.
 
-For some of the later batches, blank samples (solvent?), QC Cal (??), and QC ISDil (pooled QC with diluted internal standard ??) samples were added as well. The analysis of the metabo_chris_untarget dataset took place over 4 years, with data generated in 2016, 2017, 2020 and 2021.
+For two plates (BPLT00000407 and BPLT00000411) duplicated measurements are
+available. For the final data set only one of the two might be included.
 
-For a summary of nr of pooled QC (Pool) and biological (Study) samples, see the table above. 
+Also, for some of the later batches, blank samples (solvent?), QC Cal (pooled QC
+samples in different concentrations), and QC ISDil (pooled QC with internal
+standards spiked in different concentrations) samples were added as well. The
+analysis of the metabo_chris_untarget dataset took place over 4 years, with data
+generated in 2016, 2017, 2020 and 2021.
+
+For a summary of nr of pooled QC (Pool) and biological (Study) samples, see the table above.
 
 
 
@@ -203,57 +216,67 @@ For a summary of nr of pooled QC (Pool) and biological (Study) samples, see the 
 - Total number of study samples, are there replicated study samples? note: some
   plates were repeated because of failures or problems, maybe also check if the
   data is there.
-  
+
+Below we evaluate the total number of samples and unique samples.
 
 ```{r sampleData(chris) studysamples}
-
-
-#nr of batches
+#' nr of batches
 length(unique(df$batch_id))
 
-#nr of unique biological samples
-print('The unique number of biological samples are:')
+#' nr of unique biological samples
 biolog_df <- df[df$sample_type == 'Study',]
 length(unique(biolog_df$sample_id))
 
-#count non-unique overlapping biologicql samples
+#' count non-unique overlapping biologicql samples
 nrow(df) - length(unique(biolog_df$sample_id))
 
+```
 
-#duplicate biologicql samples
+We next identify duplicated samples.
+
+```{r}
+#' duplicate biologicql samples
 n_occur <- data.frame(table(biolog_df$sample_id))
-#n_occur[n_occur$Freq > 1,]
+#' n_occur[n_occur$Freq > 1,]
 
-#nice table of replicate bio samples
-kable_input <- kable(n_occur[n_occur$Freq > 1,])
+#' nice table of replicate bio samples
+kable_input <- kable(n_occur[n_occur$Freq > 1,],
+                     caption = "Study samples measured more than once.")
 kable_styling(kable_input, latex_options= c("scale_down", "hold_position"))
 
-#filter df
+```
+
+Below we identify the batches and plates for these duplicated samples
+
+```{r}
+#' filter df
 rep <- unlist(as.data.frame(n_occur[n_occur$Freq > 1,][1]) )
 dupl_names <- as.vector(sapply(rep, as.character))
-#dupl_names[1]
+#' dupl_names[1]
 replicates_df <- df[df$sample_id %in% dupl_names,]
-#nrow(replicates_df)
-#print(replicates_df)
+#' nrow(replicates_df)
+#' print(replicates_df)
 unique(replicates_df$batch_id)
 
-#nice table of replicate bio samples
-kable_input <- kable(replicates_df)
+#' nice table of replicate bio samples
+kable_input <- kable(replicates_df, caption = "Duplicated samples.")
 kable_styling(kable_input, latex_options= c("scale_down", "hold_position"))
 
 #' write to file for manuel inspection
 #handle <- 'data/sampleData_chris_duplicates.txt'
 #write.table(replicates_df, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
 
-
 ```
 
-The unique number of biological samples are `r length(unique(biolog_df$sample_id))`. As the sample data contains `r nrow(df) ` rows, 
-this means that there are `r nrow(df) - length(unique(biolog_df$sample_id))` biological replicates present in the dataset. 
+The replicated samples represent indeed re-injected sample plates.
 
-For the list of duplicate biological (Study) samples, see the table above. There are `r nrow(replicates_df)` duplicates present. 
 No triplicates or other types of replicates (frequency > 2) etc samples were detected.
-The duplicates were either present in both BATCH0155 and BATCH0185; or in both BATCH0134 and BATCH0135. See filtered sampleData table.
+
+The duplicates were either present in both BATCH0155 and BATCH0185; or in both
+BATCH0134 and BATCH0135. See filtered sampleData table above.
+
+jo: would maybe keep the duplicated plates for now. We don't know which of the
+two is the better/more reliable one? (or was that mentioned in the logbook?)
 
 BATCH0155 and BATCH0134 are removed, the other is the same plate reanalyzed.
 Also, only the study, QC and blank samples are retained at this point.
@@ -268,7 +291,8 @@ The available sample types are:
 
 ```{r subset msexperiment}
 
-#' Remove batch BATCH155 and BATCH134
+#' Remove batch BATCH155 and BATCH134;
+#' jo: would still keep the
 chris <- chris[!sampleData(chris)$batch_id %in% c("BATCH0134", "BATCH0155")]
 nrow(sampleData(chris))
 
@@ -295,11 +319,10 @@ After subsetting the chris MSExperiment, `r nrow(sampleData(chris))` samples rem
 ```{r check nr of spectra per sample, echo=F}
 
 ##FYI for MDG: mtcars |> sqrt() |> head() ===== head(sqrt(mtcars))
-# get number of spectra per file
+#' get number of spectra per file
 df4 <- fromFile(chris) |>
     table()
-#summary(df4)
-min(df4)
+quantile(df4)
 #ok, nr of spetra per file are ok.
 
 #doublecheck this, ok
@@ -309,18 +332,16 @@ min(df4)
 
 ```
 
-All samples in the experiment have the same amount of spectra: `r min(df4)` per sample. 
+All samples in the experiment have the same amount of spectra: `r min(df4)` per sample.
 With `r nrow(df)` samples, this gives indeed a total of `r length(s)` spectra in total.
 
 
 ```{r check qual with some samples and plot BPC}
+#' Select POOL_4, POOL_5, POOL_6 from each batch.
+chris_qc_sel <- chris[grep("^POOL_[4,5,6]", sampleData(chris)$sample_id)]
 
-#keep only firstfew POOL_5 samples to try
-selctionPOOL5_df <- df[df$sample_id == 'POOL_5' | df$sample_id == 'POOL_52', ]
-rownrs_selctionPOOL5_df <- as.numeric(selctionPOOL5_df$sample_id_)
-chris_2 <- chris[rownrs_selctionPOOL5_df]
-#chris_2 <- chris[c(37, 127)] #how to do better subsetting??? eg all with name pool5 ??
-
+#' jo: ideally, use sampleData(chris) instead of `df`, since it might no
+#' longer represent the (now subset) chris variable.
 
 #' Get the distribution of peak counts per file
 #spectra(chris_2) |>
@@ -344,10 +365,13 @@ chris_2 <- chris[rownrs_selctionPOOL5_df]
 #basePeakIntensity(spectra(chris_2))  #not found?? but could plot?
 #totIonCurrent(spectra(chris_2)) #not found??
 
+#' Define a (unique?) color for each batch.
+col_batch <- rainbow(length(unique(sampleData(chris)$batch_id)))
+names(col_batch) <- unique(sampleData(chris)$batch_id)
 
 #' Extract and plot a BPC
-bpc <- chromatogram(chris_2, aggregationFun = "max")
-plot(bpc)
+bpc <- chromatogram(chris_qc_sel, aggregationFun = "max")
+plot(bpc, col = paste0(col_batch[bpc$batch_id], 20))
 
 #' save plot
 png(paste0(IMAGE_PATH,'/BPC.png'), width=7, height=5, units="in", res=150)
@@ -362,8 +386,8 @@ For a few samples, the LC-MS data is visualized and a base peak chromatogram (BP
 ```{r plot TIC per file}
 
 #' Extract and plot a TIC
-tic <- chromatogram(chris_2, aggregationFun = "sum")
-plot(tic)
+tic <- chromatogram(chris_qc_sel, aggregationFun = "sum")
+plot(tic, col = paste0(col_batch[tic$batch_id], 20))
 
 #' save plot
 png(paste0(IMAGE_PATH,'/TIC.png'), width=7, height=5, units="in", res=150)
@@ -374,6 +398,25 @@ dev.off()
 ```
 
 For a few samples, the LC-MS data is visualized and a total ion chromatogram (TIC) is plotted above.
+
+- filter the data to rt 10 - 250? (-> filterRt)
+- plot the BPC and TIC separately for each batch.
+- bin the bpc (or tic) calculate similarity of BPC (or TIC) and show as heatmap
+  (similar to
+  https://jorainer.github.io/xcmsTutorials/articles/xcms-preprocessing.html#general-data-overview
+  ); ideally, using a color for each batch and also one for sample type (blank,
+  study, QC). could also use a PCA to compare them?
+
+
+
+### Evaluation of signal for internal standards
+
+jo: would be nice to get some hint how the data for internal standards (per
+batch) looks like. Maybe check with Phili how she extracted EICs for the
+internal standards, would match the m/z and then extract the signal for a
+relaxed rt window around the *expected* rt. Then essentially "just" plot the
+EICs for the IS separately per batch (all in one plot will most likely be too
+busy?)
 
 
 ```{r}
