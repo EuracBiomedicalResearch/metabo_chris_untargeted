@@ -51,7 +51,8 @@ TODO:
 ### Normalization
 
 - [normalization.Rmd](normalization.Rmd): implementation of various data
-normalisation approaches (between-sample, within-batch and between-batch) for 1 specific polarity.
+  normalisation approaches (between-sample, within-batch and between-batch) for
+  1 specific polarity.
 
 ## Required packages and setup
 
@@ -84,7 +85,8 @@ install.packages(c("tidyverse",
                    "RSQLite",
                    "rmarkdown",
                    "kableExtra",
-                   "magick"))
+                   "magick",
+                   "vioplot"))
 
                  
                  
