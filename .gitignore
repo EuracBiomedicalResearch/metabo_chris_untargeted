@@ -12,3 +12,5 @@ phenodata.txt
 *.xlsx
 *.sqlite
 .Rhistory
+*.txt
+
