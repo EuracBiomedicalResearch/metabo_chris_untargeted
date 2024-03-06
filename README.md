@@ -86,7 +86,10 @@ install.packages(c("tidyverse",
                    "rmarkdown",
                    "kableExtra",
                    "magick",
-                   "vioplot"))
+                   "vioplot",
+                   "pandoc",
+                   "pander",
+                   "car"))
 
                  
                  
