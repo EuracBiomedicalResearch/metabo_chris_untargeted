@@ -437,11 +437,9 @@ quantile(df4)
 #length(s) / nrow(sampleData(chris))  #s is spectra and chris is msexperiment
 ```
 
-All samples in the experiment have the same amount of spectra: `r min(df4)` per
+All samples in the experiment have (almost) the same amount of spectra: `r median(df4)` per
 sample.  With `r nrow(sampleData(chris))` samples, this gives indeed a total of
 `r length(s)` spectra in total.
-
-###FINDME!!!
 
 To conclude, there are no problematic or failed samples (due to a low number of
 spectra and thus a restricted retention time range.
