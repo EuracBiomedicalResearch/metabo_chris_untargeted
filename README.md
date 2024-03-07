@@ -5,7 +5,7 @@ normalization of the (HILIC-based) untargeted metabolomics data from CHRIS.
 
 ## Contact persons
 
-- Marilyn De Graeve
+- Marilyn De Graeve 
 - Johannes Rainer
 
 ## Previous contributors
@@ -51,7 +51,8 @@ TODO:
 ### Normalization
 
 - [normalization.Rmd](normalization.Rmd): implementation of various data
-normalisation approaches (between-sample, within-batch and between-batch) for 1 specific polarity.
+  normalisation approaches (between-sample, within-batch and between-batch) for
+  1 specific polarity.
 
 ## Required packages and setup
 
@@ -68,8 +69,30 @@ BiocManager::install(c("BiocStyle",
                        "UpSetR",
                        "pheatmap",
                        "SummarizedExperiment",
-                       "writexl"))
+                       "MsExperiment",
+                       "Spectra",
+                       "MetaboCoreUtils",
+                       "MsBackendSql",
+                       "MsQuality",
+                       "writexl",
+                       "ProtGenerics",
+                       "MsCoreUtils",
+                       "MetaboAnnotation"))
 
+install.packages(c("tidyverse",
+                   "readxl",
+                   "readr",
+                   "RSQLite",
+                   "rmarkdown",
+                   "kableExtra",
+                   "magick",
+                   "vioplot",
+                   "pandoc",
+                   "pander",
+                   "car"))
+
+                 
+                 
 ```
 
 ## Raw mzML data
