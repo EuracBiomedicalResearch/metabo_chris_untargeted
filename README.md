@@ -36,6 +36,9 @@ script should then be executed with `sbatch --mem-per-cpu=24000 -c 10
 
 ### Preprocessing
 
+- [CHRIS_preprocessing_pos.Rmd](CHRIS_preprocessing_pos.Rmd): preprocessing 
+  of the positve ionization mode of CHRIS study.
+
 -- NEEDS TO BE UPDATED AND FIXED --
 
 - [peak_detection.Rmd](peak_detection.Rmd): peak detection and peak
