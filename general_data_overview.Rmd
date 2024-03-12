@@ -64,7 +64,7 @@ RDATA_PATH <- paste0("data/RData/", filename, "/")
 dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
 
 #' Path to the data
-DATA_PATH <- '/media/mdegraeve/josung/data' #'data' #FINDME!!!
+DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS' #'data' #FINDME!!!
 ```
 
 ## Packages
