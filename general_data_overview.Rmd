@@ -23,7 +23,6 @@ library(rmarkdown)
 library(BiocStyle)
 library(knitr)
 library(kableExtra)
-library(pandoc)
 library(pander)
 opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
                cache = FALSE, fig.width = 10, fig.height = 7)
@@ -51,7 +50,7 @@ both positive and negative ionization mode, the overview comprizes the positive
 
 ```{r settingsdefine paths, echo = FALSE}
 #' General settings
-filename <- " general_data_overview"
+filename <- "general_data_overview"
 
 #' Path to save images to; remove if exists.
 IMAGE_PATH <- paste0("images/", filename, "/")
@@ -88,10 +87,11 @@ suppressMessages(library(MetaboCoreUtils))
 ## Computation
 
 ```{r parallel_processing_setup, message=FALSE}
-#' Set up parallel processing using multiple cores
-NR_CORES <- 8
+#' Set up parallel processing using multiple cores: get the number of
+#' cpus allocated by queueing system or fall back to 7
+NR_CORES <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 8)) - 1L
 if (.Platform$OS.type == "unix") {
-    register(bpstart(MulticoreParam(NR_CORES))) ###FINDME!!!
+    register(MulticoreParam(NR_CORES)) ###FINDME!!!
 } else {
     register(bpstart(SnowParam(NR_CORES)))
 }
@@ -236,7 +236,7 @@ the sampleData: the trailing 2 for all "sample_id" came from the _R2 in the file
 name. To solve in the SQLite database (performed only once), see code
 bolow.
 
-```{r fix bug SQLite DB trailing number}
+```{r fix bug SQLite DB trailing number, eval = FALSE}
 #' run this once with R stated from the location of the DB
 #' library(RSQLite)
 
@@ -271,9 +271,9 @@ two might be included. See Section [Study samples] for details.
 ### Study samples
 
 In this section, information regarding the study samples is given (total number
-  of study samples, are there replicated study samples, etc.). Note: some plates
-  have been repeated because of failures or problems, so extra emphasis was given to
-  check whether this data is there.
+of study samples, are there replicated study samples, etc.). Note: some plates
+have been repeated because of failures or problems, so extra emphasis was given
+to check whether this data is there.
 
 Below we evaluate the total number of samples and unique samples.
 
@@ -288,7 +288,7 @@ length(unique(biolog_df$sample_id))
 
 #' count non-unique overlapping biological samples
 print('nr of overlapping biological samples:')
-nrow(sampleData(chris)) - length(unique(biolog_df$sample_id))
+nrow(biolog_df) - length(unique(biolog_df$sample_id))
 ```
 
 We next identify duplicated samples.
@@ -320,7 +320,10 @@ print('batches with duplicate samples:')
 unique(replicates_df$batch_id)
 
 #' nice table of replicate bio samples
-kable_input <- kable(replicates_df, caption = "Duplicated samples.")
+kable_input <- kable(
+    replicates_df[, c("file_name", "plate", "time_stamp", "sample_id",
+                      "batch_id", "injection_index")],
+    caption = "Duplicated samples.")
 kable_styling(kable_input, latex_options= c("scale_down", "hold_position"))
 
 #' write to file for manuel inspection
@@ -578,10 +581,9 @@ for (i in 1:length(unique(sampleData(chris)$batch_id))) {
     #print(i)
 
     #' Select one batch.
-    chris_batch <- chris[grep(unique(sampleData(chris)$batch_id)[i],
-                              sampleData(chris)$batch_id, fixed = TRUE)]
-    #length(chris_batch)
     batch_id <- unique(sampleData(chris)$batch_id)[i]
+    chris_batch <- chris[which(sampleData(chris)$batch_id == batch_id)]
+    #length(chris_batch)
 
     #' match color to sample_type
     col_samples <- col_sampletype[sampleData(chris_batch)$sample_type]
@@ -608,7 +610,7 @@ for (i in 1:length(unique(sampleData(chris)$batch_id))) {
                legend = names(col_sampletype),
                ncol = 1, lty = 1, cex=1)
 
-        }
+    }
 
     #' save plot for BPC and TIC
     png(paste0(dirBpc, '/chris_BPC_', batch_id, '.png'),
@@ -633,11 +635,39 @@ for (i in 1:length(unique(sampleData(chris)$batch_id))) {
            ncol = 1, lty = 1, cex=1)
     dev.off()
 
-    }
+}
 ```
 
-Very dissimilar behaviour for all sample\_types (POOL, Study and Blank samples)
+Very dissimilar behaviour for all sample_types (POOL, Study and Blank samples)
 in between the different batches are noted.
+
+Some (subjective) observations for the BPC are listed below (TIC behave
+similarly):
+
+- Batch 0001 - 0004:
+  - similar signal.
+- Batch 0009 - 0024:
+  - split of signal at around 30 seconds into multiple peaks.
+  - decrease of intensity for peak around 140 seconds.
+  - peaks after 150 seconds seem shifted to the right.
+- Batch 0025 - 0028:
+  - higher signal (noise/contamination?) between 50 and 125 seconds.
+  - additional peak/signal at around 130 seconds.
+  - generally higher signal.
+- Batch 0036 - 0075:
+  - higher signal/intensities for BP signal after 120 seconds.
+  - see-saw signal between 75 and 125 seconds, that disappears after batch 0066.
+- Batch 0079 - 0081:
+  - general decrease in signal.
+  - changes in peak composition at around 30 seconds.
+- Batch 0087 - 0120:
+  - peak composition at around 30 seconds like before.
+  - low *noise* between 50 and 125 seconds.
+- Batch 0125 - 0186:
+  - loose signal in study samples from 20-30 seconds. Signal for QC samples
+    still high.
+  - high noise from 50 to 125 seconds.
+  - decreasing signal intensity (with batch).
 
 
 ### Evaluation of signal for internal standards
@@ -648,18 +678,19 @@ features, the signals of the internal standards (IS) are evaluated.
 The EICs for all the standards are generated by matching the *m/z* value followed
 by extracting the signal for a relaxed rt window around the *expected* rt. The
 lists with the *expected* rts has been curated manually thoroughly *a priori* by
-Philippine Louail and Johannes Rainer; and are saved under the following filenames:
+Philippine Louail and Johannes Rainer; and are saved under the following
+filenames:
 
-- "Mix\_alignment.txt"
+- "Mix_alignment.txt"
 
 This file contain the 29# standards which have been used for the alignment in
 the NAFLD metabolomics experiment. 11# true IS (standards with heavy atoms 13C
 and 15N) are present in this file, which were reported to have a good quality in
-the positive ionisation mode (see file "internal\_standard.txt" column
+the positive ionisation mode (see file "internal_standard.txt" column
 'quality_POS' for more info regarding the quality). The remaining 18# standards
 are overlapping with the next file and will be extracted from the second file.
 
-- "standards\_dilution_nafld.txt"
+- "standards_dilution_nafld.txt"
 
 This file contains the 60# (from a total of 200#) in-house standards which have
 been acquired with a good quality in the positive ionisation mode. See column
@@ -703,7 +734,8 @@ df <- as.data.frame(df)
 
 ##' list 2: standards_dilution_nafld
 #' load the in-house standards list
-standardsDilutionNafld_df <- read.delim(file.path(DATA_PATH, "standards_dilution_nafld.txt"))
+standardsDilutionNafld_df <- read.delim(
+    file.path(DATA_PATH, "standards_dilution_nafld.txt"))
 standardsDilutionNafld_df <- standardsDilutionNafld_df[!is.na(standardsDilutionNafld_df$POS), ]
 rownames(standardsDilutionNafld_df) <- standardsDilutionNafld_df$abbreviation
 #standardsDilutionNafld_df
@@ -763,11 +795,12 @@ for (i in 1:length(unique(sampleData(chris)$batch_id))) {
     #print(i)
 
     #' Select one batch.
-    chris_batch <- chris[grep(unique(sampleData(chris)$batch_id)[i],
-                              sampleData(chris)$batch_id, fixed = TRUE)]
-    #length(chris_batch)
     batch_id <- unique(sampleData(chris)$batch_id)[i]
+    chris_batch <- chris[which(sampleData(chris)$batch_id == batch_id)]
+    #length(chris_batch)
 
+    dirBatch <- file.path(dirEic, batch_id)
+    dir.create(dirBatch, showWarnings = FALSE)
     #' match color to sample_type
     col_samples <- col_sampletype[sampleData(chris_batch)$sample_type]
 
@@ -788,15 +821,20 @@ for (i in 1:length(unique(sampleData(chris)$batch_id))) {
         standard_id <- standards_chris_pos$abbreviation[j]
 
         #' save plot for EIC
-        png(paste0(dirEic, '/chris_EIC_', batch_id, '_', standard_id, '.png'),
+        png(paste0(dirBatch, '/chris_EIC_', batch_id, '_', standard_id, '.png'),
             width=11, height=7, units="in", res=150)
-        plot(eics[j,],
+        plot(eics[j, ],
              col = paste0(col_samples[eics$sample_type], 80),
              main = paste0("EIC_", batch_id, '_', standard_id))
         grid()
         legend("topright", inset=c(-0,0), col = col_sampletype,
                legend = names(col_sampletype),
                ncol = 1, lty = 1, cex=1)
+        mz_min_max <- fData(eics)[j, c("mzmin", "mzmax")]
+        legend("topleft", legend = c(
+                              standards_chris_pos$name[j],
+                              paste0(c("m/z min: ", "m/z max: "),
+                                     format(mz_min_max, digits = 8))))
         abline(v = standards_chris_pos$RT[j], col = "red", lty = 3)
         dev.off()
 
