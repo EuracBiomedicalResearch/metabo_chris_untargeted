@@ -1,5 +1,5 @@
 ---
-title: "CHRIS preprocessing posititve mode"
+title: "CHRIS preprocessing positive mode"
 author: "Marilyn De Graeve, Philippine Louail, Johannes Rainer"
 affiliation: "Eurac Research, Bolzano, Italy"
 date: "2024-02-28"
@@ -28,7 +28,7 @@ knitr::knit_hooks$set(time_it = local({
       # calculate the time difference after a chunk
       res <- difftime(Sys.time(), now, units = "secs")
       # return a character string to show the time
-      paste("Time for this code chunk to run:", round(res,
+      paste("    Time for this code chunk to run:", round(res,
         2), "seconds")
     }
   }
@@ -49,7 +49,7 @@ During this workflow, the preprocessing (PP) of the untargeted metabolomics data
 of the Cooperative Health Research in South Tirol (CHRIS) study is
 performed. For a description of the study, methods used for the collection,
 handling and aqcuisition of the liquid chromatography-mass spectrometry (LC-MS)
-samples, please see [@verri_hernandes_age_2022]. Samples are aquired in both
+samples, please see [@verri_hernandes_age_2022]. Samples are acquired in both
 positive and negative ionization mode, for which the PP of the positive (pos)
 mode will be performed in this Rmarkdown document.
 
@@ -59,7 +59,7 @@ mode will be performed in this Rmarkdown document.
 
 ```{r directories, echo = FALSE}
 #' General settings
-filename <- " CHRIS_preprocessing_pos"
+filename <- "CHRIS_preprocessing_pos"
 
 #' Path to save images to; remove if exists.
 IMAGE_PATH <- paste0("images/", filename, "/")
@@ -101,8 +101,9 @@ suppressMessages(library(xcms))
 ## Computation
 
 ```{r parallel_processing_setup, message=FALSE}
-#' Set up parallel processing using multiple cores
-NR_CORES <- as.integer(8)              ###FINDME!!!
+#' Set up parallel processing using multiple cores: get the number of
+#' cpus allocated by queueing system or fall back to 7
+NR_CORES <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 8)) - 1L
 if (.Platform$OS.type == "unix") {
     register(bpstart(MulticoreParam(NR_CORES)))
 } else {
@@ -118,11 +119,11 @@ Create a `MsExperiment` called `chris` representing the data.
 we restrict the dataset by:
 
 - excluding badly aqcuired samples which were replicated using re-injection of
-the sample plate (BPLT00000411\_R2 and BPLT00000407_R);
+the sample plate (BPLT00000411_R2 and BPLT00000407_R);
 - the additional (extended)
 quality control samples available for some batches (i.e., the *pool dilution
 series* samples);
-- RT filter to actual LC-MS acquisition window;
+- retention time (rt) filter to actual LC-MS acquisition window;
 - select only batch.
 
 
@@ -163,6 +164,7 @@ sampleData(chris)[, c(5, 10, 11, 13)] |>
     head() |>
     pandoc.table(style = "rmarkdown",
                  caption = "Some samples from the data set.")
+
 ```
 
 The number of samples for the various *sample types* are:
@@ -173,6 +175,7 @@ table(sampleData(chris)$sample_type) |>
     as.data.frame() |>
     pandoc.table(style = "rmarkdown",
                  caption = "Numer of samples per sample type")
+
 ```
 For which we define colors.
 
@@ -201,28 +204,29 @@ finding cwp parameter
 - peakwidth: observing previous EIC, expecting between 2 to 20s
 - ppm:
 
-```{r ppm_parameter decide on 1 sample}
-#' choose a nice compound here
+```{r ppm_parameter decide with example 1}
+##' example 1
+#' cystine
 cystine_mz <- calculateMass("C6H12N2O4S2") |>
-  mass2mz("[M+H]+")
-
+    mass2mz("[M+H]+")
 cystine_mz <- cystine_mz[1, 1]
 
 #' plot to see rt range for one sample
-cst <- chromatogram(chris[1L],
+eic_cystine <- chromatogram(chris[1L],
                     rt = c(200, 220),
                     mz = cystine_mz + c(-0.01, 0.01)) #aprox 50ppm
-plot(cst)
+plot(eic_cystine,
+     main = "EIC for cystine one sample")
 
 
 #' plot to see rt range for one batch
-cst <- chromatogram(chris[grep(unique(sampleData(chris)$batch_id)[1],
+eic_cystine <- chromatogram(chris[grep(unique(sampleData(chris)$batch_id)[1],
                                sampleData(chris)$batch_id, fixed = TRUE)],
                     rt = c(200, 220),
                     mz = cystine_mz + c(-0.01, 0.01),
                     chunkSize = NR_CORES)
-plot(cst,
-     col = paste0(col_samples[cst$sample_type], 60),
+plot(eic_cystine,
+     col = paste0(col_samples[eic_cystine$sample_type], 60),
      main = "EIC for cystine one batch")
 
 
@@ -232,7 +236,7 @@ cst <- chris[1L] |>
     filterRt(rt = c(210, 220)) |>                      #not outside peak, only to retrieve ppm. can be done with apex
     filterMzRange(mz = cystine_mz + c(-0.01, 0.01))
 #lengths(cst)                                           #only keep spectra whitin peaks, need to be all value '1'
-min(lengths(cst))
+#min(lengths(cst))
 
 #' Calculate the difference in m/z values between scans
 mz_diff <- cst |>
@@ -242,33 +246,32 @@ mz_diff <- cst |>
     abs()
 
 #' Express it in ppm
-print('ppm range detected across samples:')
-range(mz_diff * 1e6 / mean(unlist(mz(cst))))  #2.6 ppm for batch[45] == BATCH0088
+print('ppm range of cystine detected across samples:')
+format(round(range(mz_diff * 1e6 / mean(unlist(mz(cst)))), 3), 3)  #2.6 ppm for batch[45] == BATCH0088
 
-```
-
-The *m/z* ranges up `r range(mz_diff * 1e6 / mean(unlist(mz(cst))))[2]` ppm,
-which was good.
-
-But can also see skew to the right on the EIC (see plots generated in the
-general\_data_overview) for most of the standards. So choose a largerpeak width
-(20s) to accommodate.
-
-```{r check with 2 EICs ppm ok}
-##' example 1
-#' #' extract test ion
-#' cystine
+#' extract test ion for whole dataset
 eic_cystine <- chromatogram(chris,
                             rt = c(200, 220),
                             mz = cystine_mz + c(-0.01, 0.01),
                             chunkSize = NR_CORES)
 
 
+```
+
+The *m/z* ranges up `r format(round(max(range(mz_diff * 1e6 / mean(unlist(mz(cst))))),
+             3), 3)` ppm, which is good (ppm < 5).
+
+But can also see shift to the right (symmetrical shift, skewness and kurtosis
+are OK) to the expected rt on the EIC (see plots generated in the
+general_data_overview) for most of the standards. So, choose a large peak width
+(20s) to accommodate.
+
+
+```{r check ppm ok with example 2}
 ##' example 2
 #' histidine
 his_mz <- calculateMass("C6H9N3O2") |>
   mass2mz("[M+H]+")
-
 his_mz <- his_mz[1, 1]
 
 #' expected mz_diff
@@ -277,40 +280,55 @@ his_mz <- his_mz[1, 1]
 #his_mz - (his_mz*10/1e6)
 #his_mz + (his_mz*10/1e6)
 
+#' plot to see rt range for one sample
+eic_his <- chromatogram(chris[1L],
+                    rt = c(185, 195),
+                    mz = his_mz + c(-0.01, 0.01))
+plot(eic_his,
+     main = "EIC for histidine one sample")
+
 #' extract EIC
-eic_his <- chromatogram(chris,
+eic_his <- chromatogram(chris[grep(unique(sampleData(chris)$batch_id)[1],
+                               sampleData(chris)$batch_id, fixed = TRUE)],
                         rt = c(185, 195),
                         mz = his_mz + c(-0.01, 0.01),
                         chunkSize = NR_CORES)
 
 #' for testing below only (one batch):
-#plot(eic_his,
-#     col = paste0(col_samples[eic_his$sample_type], 60),
-#     main = "EIC for histidine")
+plot(eic_his,
+     col = paste0(col_samples[eic_his$sample_type], 60),
+     main = "EIC for histidine one batch")
 
 #' Restrict the data to signal from Cystine for all samples
-#his <- chris |>
-#    spectra() |>
-#    filterRt(rt = c(188, 190)) |>
-#    filterMzRange(mz = his_mz + c(-0.001, 0.001))
+his <- chris |>
+    spectra() |>
+    filterRt(rt = c(188, 190)) |>
+    filterMzRange(mz = his_mz + c(-0.001, 0.001))
 #lengths(his)
 #min(lengths(his))
 
 #' Calculate the difference in m/z values between scans
-#mz_diff <- his |>
-#    mz() |>
-#    unlist() |>
-#    diff() |>
-#    abs()
+mz_diff <- his |>
+    mz() |>
+    unlist() |>
+    diff() |>
+    abs()
 
 #' Express it in ppm
-#print('ppm range detected across samples:')
-#range(mz_diff * 1e6 / mean(unlist(mz(his))))  #4.8 ppm for batch[45] == BATCH0088
+print('ppm range of histidine detected across samples:')
+format(round(range(mz_diff * 1e6 / mean(unlist(mz(cst)))), 3), 3)   #4.8 ppm for batch[45] == BATCH0088
+
+#' extract EIC whole dataset
+eic_his <- chromatogram(chris,
+                        rt = c(185, 195),
+                        mz = his_mz + c(-0.01, 0.01),
+                        chunkSize = NR_CORES)
 
 ```
 
-Select the peak picking parameters with a large ppm (default 40ppm) and a very low
-signal to noise ratio (snthresh), as needed to find the example peaks.
+Select the peak picking parameters with a large ppm (default = 40ppm) and a very
+low signal to noise ratio (snthresh = 2), as this is needed to find the example
+peaks.
 
 ```{r echo=TRUE, warning=FALSE}
 param <- CentWaveParam(peakwidth = c(2, 20), ppm = 40, snthresh = 2,  #put ppm here always 40, NS was needed <3 here
@@ -318,9 +336,9 @@ param <- CentWaveParam(peakwidth = c(2, 20), ppm = 40, snthresh = 2,  #put ppm h
 
 ```
 
-perform peak picking on 2 examples.
+perform peak picking on the 2 examples: cystine and histidine.
 
-```{r include=FALSE}
+```{r include=TRUE}
 #' test for some compounds:
 #' cystine
 cystine_test <- findChromPeaks(eic_cystine, param = param, chunkSize = NR_CORES)
@@ -332,9 +350,9 @@ head(chromPeaks(his_test))
 
 ```
 
-show plots for 2 examples
+show plots after peak picking for the 2 examples.
 
-```{r include=FALSE}
+```{r include=TRUE}
 #' Plot test chromatogram
 par(mfrow = c(1, 2))
 plot(cystine_test,
@@ -350,24 +368,26 @@ plot(his_test,
      peakCol = col_samples[chromPeaks(his_test)[, "column"]],
      peakBg = paste0(col_samples, 10)[chromPeaks(his_test)[, "column"]])
 grid()
-legend("topright", inset=c(-0,0), col = col_sampletype, legend = names(col_sampletype),
-       ncol = 1, lty = 1, cex=.8)
+legend("topright", inset=c(-0,0), col = col_sampletype,
+       legend = names(col_sampletype), ncol = 1, lty = 1, cex=.8)
 
 ```
 
-OK, apply to all data:
+OK, apply the peak picking using these parameters to all data.
 
 ```{r findchrompeaks_all_data, echo=TRUE, eval = !file.exists("chris_after_peakdetect.RData")}
 chris <- findChromPeaks(chris, param = param, chunkSize = NR_CORES)
 save(chris, file = paste0(RDATA_PATH, "chris_after_peakdetect.RData"))
+
 ```
 
-```{r, echo = FALSE, eval = file.exists("chris_after_peakdetect.RData")}
+```{r load peakpick rdata, echo = FALSE, eval = file.exists("chris_after_peakdetect.RData")}
 #' Loading the already peak-detected data
 load(paste0(RDATA_PATH, "chris_after_peakdetect.RData"))
+
 ```
 
-We next remove samples in which a much lower number of peaks was detected.
+We next remove samples in which a much lower number of peaks is detected.
 
 ```{r, results = "asis"}
 #' remove samples that have overall low intensity/peak detected,
@@ -396,7 +416,10 @@ batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
 
 ```
 
-```{r, include=FALSE}
+After peak detection on the whole dataset, the EICs of our 2 examples are
+evaluated agein.
+
+```{r, include=TRUE}
 #' test for ions of interest
 eic_cystine <- chromatogram(chris,
                             rt = c(202, 217),
@@ -411,52 +434,90 @@ eic_his <- chromatogram(chris,
                         chunkSize = NR_CORES)
 
 par(mfrow = c(1, 2))
-plot(eic_cystine, main = "Cystine", col = paste0(col_samples, 80),
+plot(eic_cystine, main = "Cystine",
+     col = paste0(col_samples, 60),
      peakCol = col_samples[chromPeaks(eic_cystine)[, "sample"]],
-     peakBg = paste0(col_samples[chromPeaks(eic_cystine)[, "sample"]], 40))
+     peakBg = paste0(col_samples[chromPeaks(eic_cystine)[, "sample"]], 10))
 grid()
-plot(eic_his, main = "Histidine", col = paste0(col_samples, 80),
+plot(eic_his, main = "Histidine",
+     col = paste0(col_samples, 60),
      peakCol = col_samples[chromPeaks(eic_his)[, "sample"]],
-     peakBg = paste0(col_samples[chromPeaks(eic_his)[, "sample"]], 40))
+     peakBg = paste0(col_samples[chromPeaks(eic_his)[, "sample"]], 10))
 grid()
-legend("topright", col = col_sampletype, cex = 0.50,
-       horiz = TRUE,inset = c(-0.18, -0.1), xpd = TRUE,
-       text.width = 7, bty = "n",
-       legend = names(col_sampletype), lty = 1)
+legend("topright", inset=c(-0,0), col = col_sampletype,
+       legend = names(col_sampletype), ncol = 1, lty = 1, cex=.8)
+
 ```
 
-check all the good quality (internal) stardards, see list in general\_data_overview report.
+Evaluate the quality of all the (internal) standards, see list of previously
+defined 'good' standards in the general_data_overview report.
 load this file first.
 
 ```{r load standers list}
 ##' list 3: standards_chris_pos
 #' load the good quality internal and in-house standards list, see creation at general_data_overview.Rmd
-standards_chris_pos <- read.delim(file.path(DATA_PATH, "standards_chris_pos.txt"))
+standards_chris_pos <- read.delim(file.path(DATA_PATH, "standards_chris_pos.txt"), sep = ',')
 standards_chris_pos <- standards_chris_pos[!is.na(standards_chris_pos$POS), ]
 rownames(standards_chris_pos) <- standards_chris_pos$abbreviation
 #standards_chris_pos
 #nrow(standards_chris_pos)
 
+
+##' list 4: standards_dilution = NOT use
+#' load the in-house standards list of 213# pos;
+#' also the bad and undetected ones
+#standards_dilution <- read.delim(file.path(DATA_PATH, "standards_dilution.txt"))
+#standards_dilution <- standards_dilution[-245, ] #rm double entry hydroxykynurenine_3
+#standards_dilution <- standards_dilution[!is.na(standards_dilution$POS), ]
+#rownames(standards_dilution) <- standards_dilution$abbreviation
+#standards_dilution
+#nrow(standards_dilution)
+
+#'calcualte neutral mass from formula
+#standards_dilution$mass <- mapply(standards_dilution$formula,
+#                                         FUN = calculateMass)   #https://bioconductor.org/packages/release/bioc/vignettes/MetaboCoreUtils/inst/doc/MetaboCoreUtils.html
+
+#' calculate mz from neutral mass
+#standards_dilution$mass <- as.numeric(standards_dilution$mass)
+#standards_dilution$mz <- mapply(standards_dilution$mass,
+#                                 standards_dilution$POS,
+#                                 FUN = mass2mz)  #https://bioconductor.org/packages/release/bioc/vignettes/MetaboCoreUtils/inst/doc/MetaboCoreUtils.html
+
+#' calc mz and rt region
+#standards_dilution$mzmin <- standards_dilution$mz - (standards_dilution$mz*10/1e6) #10ppm allow
+#standards_dilution$mzmax <- standards_dilution$mz + (standards_dilution$mz*10/1e6)
+#standards_dilution$rtmin <- standards_dilution$RT - 20
+#standards_dilution$rtmax <- standards_dilution$RT + 20
+
+#' write to file for manuel inspection
+#handle <- file.path(DATA_PATH, 'standards_dilution_chris_pos.txt')
+#write.table(standards_dilution, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+#' try if find new good qual standards => NO, temp only
+#standards_chris_pos <- standards_dilution
+#nrow(standards_chris_pos)
+
 ```
 
-create EIC plots for all standards in pool.
+create EIC plots for all standards in pool samples after peak detection.
 
-```{r, include=FALSE}
+```{r all eics pool after peak detection, include=TRUE}
 #' All EICs in pool
 eics <- chromatogram(chris[pool_index],
                      mz = as.matrix(standards_chris_pos[, c("mzmin", "mzmax")]),
                      rt = as.matrix(standards_chris_pos[, c("rtmin", "rtmax")]),
                      chunkSize = NR_CORES)
 
-dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/afterchrompeak/")
+dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/1_afterchrompeak/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 
 for (i in seq_len(nrow(standards_chris_pos))) {
     png(paste0(dr, "EIC_", standards_chris_pos$abbreviation[i], ".png"),
         width = 12, height = 8, units = "cm", res = 600, pointsize = 4)
-    plot(eics[i], main = standards_chris_pos$name[i], col = paste0(batches_pool,80),
+    plot(eics[i], main = standards_chris_pos$name[i],
+         col = paste0(batches_pool, 60),
          peakCol = col_batches[chromPeaks(eics[i])[, "sample"]],
-         peakBg = paste0(col_batches[chromPeaks(eics[i])[, "sample"]], 40))
+         peakBg = paste0(col_batches[chromPeaks(eics[i])[, "sample"]], 10))
     grid()
     legend("topright", col = col_batch,
            legend = names(col_batch), lty = 1)
@@ -467,10 +528,9 @@ for (i in seq_len(nrow(standards_chris_pos))) {
     dev.off()
 }
 
-
 ```
 
-Look at the nb of peak per files
+Look at the number of detected peak per files.
 
 ```{r, fig.cap = "Numbers of detected peaks per sample."}
 #' Count peaks per file
@@ -478,11 +538,99 @@ chromPeaks(chris)[, "sample"] |>
     table() |>
     barplot(border = col_samples, col = col_samples)
 grid()
+
+#' average nr of peaks per sample
+print('median nr of peaks per sample:')
+format(round(median(table(chromPeaks(chris))), 3), 3) #FINDME!!! fix
+
 ```
+
+The number of detected peaks looks similar in all the samples.
+After initial peak detection, the median peaks retieved per sample was
+`r format(round(mean(table(chromPeaks(chris))), 3), 3)`.  #FINDME!!! fix
+
+Look at the number of detected peak per files in the 50-150 rt window. As this
+window is underrepresented by (internal) standards. The spectra of the `chris`
+dataset is centroided. After manual inspection, an interesting region around
+130s is selected and added to the `Mix_alignment` file. Further changes to this
+file are discussed in section [Retention time alignment].
+
+
+```{r find good qual peak for rt align in rt 50-150s range}
+#' keep only 2 samples
+mse <- chris[c(1L, 2L)]
+#mse
+#length(mse)
+
+
+## example 2
+# histidine
+
+#' Extract all spectra measured between 180 and 181 seconds
+#sps <- spectra(mse) |>
+#    filterRt(c(180, 195))
+#sps
+
+#' Visualize the profile-mode mass peak for [M+H]+ of histidine (no, already centroided)
+#sps[1] |>
+#    filterMzRange(c(his_mz-0.01, his_mz+0.01)) |>
+#    plotSpectra(lwd = 2)
+#abline(v = his_mz, col = "#ff000080", lty = 3)
+
+#' Visualize the full MS data for a small m/z - rt area
+#mse |>
+#    filterRt(rt = c(185, 195)) |> #10s
+#    filterMzRange(mz = c(156.0668, 156.0868)) |> #0.02 da
+#    plot()
+
+
+## unknown001
+#' Extract one spectrum from the second file
+#sp <- spectra(chris[1])
+#sp
+#spectraVariables(sp)
+#see rt in sp
+#sp$rtime
+#approx 331 scans
+
+#' Extract one spectrum from the one file with rt = 100 s approx
+#sp <- spectra(chris[1])[331]
+#sp
+
+#' Extract m/z values
+#mz(sp)
+
+#' Extract intensity values
+#intensity(sp)
+
+#' plot 3D centroided on this rt region
+mse |>
+    filterRt(rt = c(125, 135)) |> #10s
+    filterMzRange(mz = c(710.46, 730.48)) |> #0.02 da
+    plot()
+
+#' plot to see rt range for one sample
+#test_mz <- 720.472
+#eic_test <- chromatogram(chris,
+#                    rt = c(125, 135),
+#                    mz = test_mz + c(-0.01, 0.01),
+#                    chunkSize = NR_CORES)
+#plot(eic_test,
+#     main = "EIC for test rt 130, mz 720")
+
+#add to mixalign if improves
+#unknown001,unknown001,unknown001,,[M+H]+,,130,,,,,,,720.472,720.462,720.482,125,135
+
+```
+
 
 
 ### Refine chromatographic peaks
 
+Next, the chromatographic peaks are refined (i.e., post-process the peak
+detection results) using more stringent parameters. The peak post-processing is
+able to fuse the signal for neighboring peaks, while keeping the peaks for the
+different isomers seperately.
 
 ```{r refine_chrom_peaks,  message = FALSE, eval = !file.exists("chris_after_refine.RData")}
 #' set up the parameter
@@ -505,25 +653,36 @@ chromPeaks(chris)[, "sample"] |>
     table() |>
     barplot(border = col_samples, col = col_samples)
 grid()
+
+#' average nr of peaks per sample
+print('median nr of peaks per sample after refinement:')
+format(round(median(table(chromPeaks(chris))), 3), 3) #FINDME!!! fix
+
 ```
 
-```{r include=FALSE}
+After refinement, the average peaks retieved per sample was
+`r format(round(mean(table(chromPeaks(chris))), 3), 3)`. #FINDME!!! fix
+
+create EIC plots for all standards in pool samples after refinement.
+
+```{r all eics pool after peak refinement, include=FALSE}
 #' All EICs in pool
 eics <- chromatogram(chris[pool_index],
                      mz = as.matrix(standards_chris_pos[, c("mzmin", "mzmax")]),
                      rt = as.matrix(standards_chris_pos[, c("rtmin", "rtmax")]),
                      chunkSize = NR_CORES)
 
-dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/afterrefine/")
+dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/2_afterrefinement/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 
 for (i in seq_len(nrow(standards_chris_pos))) {
     png(paste0(dr, "EIC_", standards_chris_pos$abbreviation[i], ".png"),
         width = 12, height = 8, units = "cm", res = 600, pointsize = 4)
     eic <- eics[i]
-    plot(eic, main =standards_chris_pos$name[i], col = paste0(batches_pool, 80),
+    plot(eic, main =standards_chris_pos$name[i],
+         col = paste0(batches_pool, 60),
          peakCol = col_batches[chromPeaks(eic)[, "sample"]],
-         peakBg = paste0(col_batches[chromPeaks(eic)[, "sample"]], 40))
+         peakBg = paste0(col_batches[chromPeaks(eic)[, "sample"]], 10))
     grid()
     legend("topright", col = col_batch,
            legend = names(col_batch), lty = 1)
@@ -534,16 +693,27 @@ for (i in seq_len(nrow(standards_chris_pos))) {
     dev.off()
 }
 
-
 ```
+
+The EIC plots look the same before/after refinement for most of the (internal)
+standards. For acetylcarnitine, a second noisy tail was correctfully
+excluded. For tryrosine and tyrosine_13C_15N, peak shape quality slightly
+increased for some pool samples.
+
 
 ## Retention time alignment
 
-Multiple strategies were tested in a separate Rmd file. The current approach
-based on a single alignment based on retention times of internal standards and
-manually selected standards. This approach outperformed also a two-step
-alignment setup in which a *standard* alignment was performed after the initial
-alignment based on the above mentioned standards.
+The current retention time alignment approach is based on a single alignment
+based on retention times of internal standards and manually selected
+standards. This approach was selected, as it outperformed a two-step alignment
+setup - in which a *standard* alignment was performed after the initial alignment
+based on the above mentioned standards - on a subset of the CHRIS study samples (see
+M/NAFLD study for more information).
+
+As the rt alignment approach requires to have pool samples around (so before and
+after) each sample sub-batch, we apply next trick to make sure pool samples are
+present behind the last samples of each batch as well.
+
 
 ```{r reorder_data_set}
 #' keep a raw chris object to compare before/after alignment
@@ -566,27 +736,34 @@ tmp <- lapply(split(sd, sd$batch_id), function(batch){
 index_qc <- unlist(tmp, use.names = FALSE)
 
 #' applying it
-chris <- chris[index_qc]
+chris <- chris[index_qc]  #pool_10 is moved after 8+8 last samples
 
 #' Update indices and colors.
 col_samples <- col_sampletype[sampleData(chris)$sample_type]
 col_batches <- col_batch[sampleData(chris)$batch_id]
 pool_index <- which(sampleData(chris)$sample_type == "Pool")
 batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
+
 ```
 
-One run based on a pre-defined peak matrix of IS standards and manually selected
-standards with rt for each Pool samples. Below we define this peak matrix and
-extract the retention times for the selected chromatographic peak for each
-sample.
+First, we load a manually pre-defined peak matrix of (internal) standards
+`Mix_alignment` (renamed `mixalignment_chris_pos` after CHRIS study-specific
+adjustments since it's original creation in the M/NAFLD study). The manually
+selected standards contain rt for each pool samples, which are used to extract
+the retention times for the selected chromatographic peak for each sample.
+
 
 ```{r alignment_using_selected_standards}
 #' creating matrix for rt alignment
-mixAlignment_df <- read.delim(file.path(DATA_PATH, "Mix_alignment.txt"))
+#mixAlignment_df <- read.delim(file.path(DATA_PATH, "Mix_alignment.txt"))
+mixAlignment_df <- read.delim(file.path(DATA_PATH, "mixalignment_chris_pos.txt"), sep = ',') #new file, change included standards
 mixAlignment_df <- mixAlignment_df[!is.na(mixAlignment_df$POS), ]
 rownames(mixAlignment_df) <- mixAlignment_df$abbreviation
 #mixAlignment_df
 mixAlignment_df <- mixAlignment_df[order(mixAlignment_df$RT),]
+#nrow(mixAlignment_df)
+print('final names of standards included in the Mixalignment file:')
+rownames(mixAlignment_df)
 
 #' loop results
 ID_table <- matrix(
@@ -607,6 +784,7 @@ for (i in which(sampleData(chris)$sample_type != "Blank")) {
         mzColname = c("mz", "mz"),
         rtColname = c("RT", "rt" ),
         param = MzRtParam(ppm = 0, tolerance = 0.01, toleranceRt = 10))
+
     #' Select the chrom peak with the largest apex signal
     match_intern_standard <- filterMatches(
         match_intern_standard, SingleMatchParam(duplicates = "top_ranked",
@@ -625,55 +803,61 @@ rtdf <- function(chris, ID_table) {
     dim(x) <- dim(ID_table)
     rownames(x) <- rownames(ID_table)
     colnames(x) <- colnames(ID_table)
-    x
+    return(x)
 }
 
-#' run for chris
+#' run rt alignment on selected standards for chris
 RT_raw <- rtdf(chris, ID_table)
 
 ```
 
-We repeat the same for the full set of standards (which are not used for the
-alignment) to allow an independent evaluation of the alignment performance.
+We repeat the rt alignment using above-mentioned selected standards for the
+remaining set of standards (which are not used by the alignment code), to allow
+an independent evaluation of the alignment performance.
 
 ```{r define_rtimes_all_standards}
+#' subset (internal) standards list to those that are not included in Mix_standard;
+#' in order to have independent eval
+standards_chris_pos_eval <- standards_chris_pos[!rownames(standards_chris_pos) %in% rownames(mixAlignment_df), ]
+#rownames(standards_chris_pos_eval)
+
+#' check
+#nrow(standards_chris_pos) - nrow(mixAlignment_df) == nrow(standards_chris_pos_eval)
+
 #' Identify chromPeaks for all standards
 standards_all_cpeaks <- matrix(
     ncol = length(chris),
-    nrow = nrow(standards_chris_pos),
-    dimnames = list(rownames(standards_chris_pos), seq_len(length(chris)))
+    nrow = nrow(standards_chris_pos_eval),
+    dimnames = list(rownames(standards_chris_pos_eval), seq_len(length(chris)))
 )
 
 #' get ID for peaks matching with standard for each samples (minus Blanks)
 for (i in which(sampleData(chris)$sample_type != "Blank")) {
     tmp <- cpks[cpks$sample == i, ]
     match_standard <- matchValues(
-        query = standards_chris_pos,
+        query = standards_chris_pos_eval,
         target = tmp,
         mzColname = c("mz", "mz"),
         rtColname = c("RT", "rt" ),
         param = MzRtParam(ppm = 0, tolerance = 0.01, toleranceRt = 10))
     match_standard <- filterMatches(
-        match_standard, SingleMatchParam(duplicates = "top_ranked",
+        match_standard,
+        SingleMatchParam(duplicates = "top_ranked",
                                          decreasing = TRUE,
                                          column = "target_maxo"))
     standards_all_cpeaks[, i] <- match_standard$target_peak_id
 }
 
-#' Remove those that are already included in Mix_standard
-standards_all_cpeaks <- standards_all_cpeaks[
-    !rownames(standards_all_cpeaks) %in% rownames(mixAlignment_df), ]
-
-#' run for chris
+#' run rt alignment on selected standards to eval for chris
 standards_all_rtime_raw <- rtdf(chris, standards_all_cpeaks)
 
 ```
 
-Next we perform the alignment based on retention times of internal standards and
-manually selected standards (to cover a larger retention time range). We perform
-the alignment on all samples (except blanks, which will be aligned based on all
-study or QC samples). A subset-based alignment on QC (pool) samples performed
-less well.
+Next, we perform the alignment based on rt of the (internal) standards in
+`mixalignment_chris_pos` covering a large retention time range. We perform the
+alignment on the study and pool samples. The blanks samples, are aligned based
+on all study and pool samples, not directly from the standards. For information
+regarding this approach, see M/NAFLD study.
 
 ```{r perform_alignment_on_standards}
 #' Subset to all samples except blanks
@@ -696,8 +880,9 @@ chris <- adjustRtime(chris, param = param, chunkSize = NR_CORES)
 #' Define color, less transparency for the Pool samples
 alpha <- rep("60", length(col_samples))
 alpha[pool_index] <- "CE"
-cols <- paste0(col_samples, alpha)
 
+#' plot adj rt using subset good standards
+cols <- paste0(col_samples, alpha)
 plotAdjustedRtime(chris, col = cols)
 grid()
 legend("topright", col = col_sampletype,
@@ -711,10 +896,84 @@ legend("topright", col = col_batch,
 
 #' Replace the Rtime by the adjusted ones
 chris <- applyAdjustedRtime(chris)
+
 ```
 
-Next we evaluate the result of the alignment on the set of standards on which
-the alignment was based. These are listed in the table below.
+The rt alignment is NOK using the original `Mix_alignment` file, as it resulted
+in a high rt-deviation, especially in the rt region 50-150s, the observed rt
+deviation is up to -5 - +6s (one sample was +9s).
+
+The following approaches have been untertaken to reduce the rt-deviation among
+samples:
+
+(i) Check the list of `standards_chris_pos` if can add standards to the
+Mixaligment file to improve the rt alignment:
+
+abbreviation         |RT |Note_regarding_EICs
+---------------------|---|---------------------------------------------------------------------------------------------------------------------
+oxoproline           |70 |low signal 1500, carted, can be noise
+hypoxanthine         |126|carted, broad peak, 5000
+carnitine            |130|convoluted, broad but high intens 50k, already in Mixalignment (causes broad deviation at 130), RM from Mixalignment
+xanthine             |133|only found in 2 files with very low inten 600
+epinephrine          |144|not found in eic
+sphingosine_phosphate|145|twin peak 1000 but narrow, ADD to Mixalignment
+inosine              |146|OK narrow high 10k at apex, already in Mixalignment
+tryptophan           |155|good 20k narrow but also 2nd peak left, already in Mixalignment
+
+So, we remove carnitine and add tryptophan to the Mixalignment file. Rename the
+Mixalignment file to `Mix_alignment.txt` to `mixalignment_chris_pos.txt`. Rerun
+section [Retention time alignment] with edited Mixalignment file. The exclusion
+of carnitine and inclusion of sphinosine_phosphate improves the rt deviation to
+max +2s.
+
+
+(ii) Check the list of `standards_diluted` if can add standards to the
+Mixaligment file to improve the rt alignment:
+
+abbreviation|RT |Note_regarding_EICs
+------------|---|----------------------------------------------------------------
+hypoxanthine|126|ok intens 5000, saw pattern, but consist height, broad, NOT add
+oxoproline  |71 |low instens 1500, saw pattern, broad, ADD to Mixalignment
+riboflavin  |145|low intens 800 and not found everywhere, NOT add
+
+Edit the `mixalignment_chris_pos.txt` file to include 3 standards. Rerun section
+[Retention time alignment] with edited Mixalignment.
+
+- The inclusion of hypoxanthine, oxoproline
+and riboflavin all 3 together increases the rt deviation again to -4s - +6.5s.
+- add only oxoproline: rt dev -1 - +0.5 (same as the good standards to the
+left!) => include as good influence on rt window from 50-150)
+- add only riboflavin: -2.5 - +3 (not include)
+- add only hypoxantine: -3.1 - +3.5 (not include)
+
+So, we add oxoproline to the Mixaligment file and evaluate the effect on the
+whole preprocessing process. Also manually added the riboflavin standard to the
+`standards_chris_pos` file for external evaluation after rt alignment.
+
+!!! 2nd time run, -1.1 - +1.6 with only oxoproline added, very good still, at
+70s rt: -1 - +1s but need some other peak at 130s to keep rt deviation within
+1s. Still, very good result. Stange but when run again, -2 - 3s?? overall good
+improved yes but why less good this run, how to eval reliable?? !!!FINDME
+
+
+(iii) To further improve rt deviation arround 130s, select unknown peaks (anchor
+points) at section [Chromatographic peak detection] to include to both the
+`mixalignment_chris_pos.txt` and `standards_chris_pos` files, and rerun section
+[Retention time alignment].
+
+- unknown001: -8 - 2.5s rt dev: not found in all samples, si if found -0.5-3, if
+  not very very bad rt dev as consequence. NOT add
+- unknown002: NOK, just low signal noise in some samples
+
+So, decided not to add the extra unknown semi-qual but high intensity peak at
+130s - 720 *m/z* in the Mix_alignment file.
+!!! FINDME correspondence exept 2 samples actually much better than prev report
+without unknown001 !!! help, think because lost link to oxoproline
+
+
+Using the final Mix_alignment list, we evaluate the result of the alignment on
+the set of standards (on which the alignment was based) in pool and study
+samples. These are listed in the table below.
 
 ```{r, results = "asis"}
 #' get RT table after alignment
@@ -737,14 +996,14 @@ pandoc.table(
                      "and after alignment in QC and study samples."))
 ```
 
+Visualisation using violin plots for evaluation used standards:
+
 ```{r}
 par(mar = c(1.3, 4.5, 1, 0.5))
 vioplot(Sdsdf, las = 2, ylab = "RT standard deviation",
         main = "Standards used for alignment")
 grid()
 ```
-
-Looks pretty cool
 
 In addition, we base the evaluation of the alignment also on compounds not used
 as anchor peaks hence allowing an independent evaluation of the performance.
@@ -767,12 +1026,17 @@ pandoc.table(
                      "and after alignment in QC and study samples."))
 ```
 
+Visualisation using violin plots for evaluation of the external validation
+standards:
+
 ```{r}
 par(mar = c(1.3, 4.5, 1, 0.5))
 vioplot(tmp, las = 2, ylab = "RT standard deviation",
         main = "Standards not used for alignment")
 grid()
 ```
+
+BPC plots before and after the rt alignment to see effect thereof:
 
 ```{r bpc-before-and-after, echo=FALSE}
 #' replace value to not have problems when indexing
@@ -814,6 +1078,8 @@ legend("topright", col = col_batch, cex = 0.50,
        legend = names(col_batch), lty = 1)
 
 ```
+
+see 2 example EIC plots before vs. after rt alignment:
 
 ```{r selected_eics_after_alignment}
 #' standard after alignment
@@ -860,13 +1126,16 @@ plot(eic_his[1, pool_index], peakType = "none",
 
 ```
 
+for the standards, EIC plots of all the (internal) standards are saved after rt
+alginment.
+
 ```{r EIC-pool-after-alignment, include=FALSE}
 eics <- chromatogram(chris_pool,
                      mz = as.matrix(standards_chris_pos[, c("mzmin", "mzmax")]),
                      rt = as.matrix(standards_chris_pos[, c("rtmin", "rtmax")]),
                      chromPeaks = "none", chunkSize = NR_CORES)
 
-dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/afteralignment/")
+dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/3_afteralignment/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 
 for (i in seq_len(nrow(standards_chris_pos))) {
@@ -891,7 +1160,7 @@ eics <- chromatogram(chris,
                      rt = as.matrix(standards_chris_pos[, c("rtmin", "rtmax")]),
                      chromPeaks = "none", chunkSize = NR_CORES)
 
-dr <- file.path(IMAGE_PATH, "EIC_standards/full/afteralignment/")
+dr <- file.path(IMAGE_PATH, "EIC_standards/full/3_afteralignment/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 for (i in seq_len(nrow(standards_chris_pos))) {
     png(paste0(dr, "EIC_", standards_chris_pos$abbreviation[i], ".png"),
@@ -911,7 +1180,6 @@ for (i in seq_len(nrow(standards_chris_pos))) {
     dev.off()
 }
 
-
 ```
 
 
@@ -921,7 +1189,12 @@ save(chris, file = paste0(RDATA_PATH, "chris_after_alignment.RData"))
 
 ## Correspondence
 
-```{r}
+During correspondence, chromatographic peaks (presumably derived from the same
+ion) are grouped across samples/files.
+
+see 2 examples, for selecting parameters for the correspondance.
+
+```{r correspondence examples}
 #' Updating parameters
 param <- PeakDensityParam(
     sampleGroups = sampleData(chris)$sample_type[pool_index],
@@ -953,15 +1226,16 @@ legend("bottomright", col = col_batch, cex = 0.50,
        horiz = TRUE,inset = c(0, -0.5), xpd = TRUE,
        text.width = 4, bty = "n",
        legend = names(col_batch), lty = 1)
+
 ```
 
 For the final correspondence we reduce the required proportion in which a
 chromatographic peak has to be present to 30% to ensure that features
 representing metabolites present also in only a subset of study samples would be
-defined/present. Also, we use m/z-dependent bin sizes (i.e., m/z bins increase
-by `ppm` along the m/z dimension). For this we reduce in addition the `binSize`
+defined/present. Also, we use *m/z*-dependent bin sizes (i.e., *m/z* bins increase
+by `ppm` along the *m/z* dimension). For this we reduce in addition the `binSize`
 from 0.015 to 0.01. Thus, the final (largest) bin size for an m/z of 1000 will
-be `0.01 + ppm(1000, ppm = 10)` which is equal to 0.02.
+be `0.01 + ppm(1000, ppm = 10)`, which is equal to 0.02.
 
 ```{r perform_correspondence}
 #' Now apply to whole data
@@ -973,6 +1247,9 @@ chris <- groupChromPeaks(chris, param = param)
 #' Extract pool_sample for better visualization of analysis
 chris_pool <- chris[pool_index, keepAdjustedRtime = TRUE, keepFeatures = TRUE]
 ```
+
+Extract chromatogram with signal for isomers 1-Methylhistidine and
+3-Methylhistidine.
 
 ```{r}
 #' Extract chromatogram with signal for isomers 1-Methylhistidine and
@@ -998,7 +1275,8 @@ save(chris, file = paste0(RDATA_PATH, "chris_after_correspondence.RData"))
 ```
 
 Correspondence defined in total `r nrow(featureDefinitions(chris))`
-features. Below we evaluate the m/z (and rt) widths of the identified features.
+features. Below we evaluate the *m/z* (and rt) widths of the identified
+features.
 
 ```{r}
 #' Define the m/z and rt widths considering the apex position.
@@ -1012,7 +1290,7 @@ full_mzw <- feature_area[, "mzmax"] - feature_area[, "mzmin"]
 full_rtw <- feature_area[, "rtmax"] - feature_area[, "rtmin"]
 ```
 
-The distribution of m/z widths for all features is:
+The distribution of *m/z* widths for all features is:
 
 ```{r}
 quantile(apex_mzw)
@@ -1024,7 +1302,7 @@ The distribution of rt widths for all features is:
 quantile(apex_rtw)
 ```
 
-We first evaluate the rt and m/z widths of features considering the apex
+We first evaluate the rt and *m/z* widths of features considering the apex
 positions of all chrom peaks of a feature.
 
 ```{r, fig.cap = "Features' median retention time against rt widths (for the apex position of chrom peaks) and features' median m/z against m/z width (of apex)."}
@@ -1039,24 +1317,29 @@ plot(featureDefinitions(chris)$mzmed, apex_mzw, xlab = "m/z",
 grid()
 ```
 
-In the begin and at the end of LC, retention time widths seem to be on average lower than in the
-middle of the LC. For features' m/z widths there is a clear
-dependency on the median m/z, which is due to the settings in the correspondence
-analysis that uses m/z dependent bin sizes for the correspondence.
+In the begin and at the end of LC, retention time widths seem to be on average
+lower than in the middle of the LC. For features' *m/z* widths, there is a clear
+dependency on the median *m/z*, which is due to the settings in the
+correspondence analysis that uses *m/z* dependent bin sizes for the
+correspondence.
 
-We next evaluate the rt and m/z widths of features considering the full range of
-m/z and rt values of all chromatographic peaks of a feature. The distribution
-for the full m/z range of all chromatographic peaks per feature is:
+We next evaluate the rt and *m/z* widths of features considering the full range
+of rt and *m/z* values of all chromatographic peaks of a feature.
+
+The distribution for the full rt width of all chromatographic peaks per feature
+is:
+
+```{r}
+quantile(full_rtw)
+```
+
+The distribution for the full *m/z* range of all chromatographic peaks per
+feature is:
 
 ```{r}
 quantile(full_mzw)
 ```
 
-And the full rt width of all chromatographic peaks per feature:
-
-```{r}
-quantile(full_rtw)
-```
 
 ```{r, fig.cap = "Features' median retention time against rt widths (of all chrom peaks) and features' median m/z against m/z width (of all peaks)."}
 par(mfrow = c(1, 2))
@@ -1070,11 +1353,12 @@ plot(featureDefinitions(chris)$mzmed, full_mzw, xlab = "m/z",
 grid()
 ```
 
-The full m/z range of all chromatographic peaks per feature is (not
-unexpectedly) much larger than the m/z range for the apex positions. Still, the
-magnitude of this m/z range is quite high.
+The full *m/z* range of all chromatographic peaks per feature is (not
+unexpectedly) much larger than the *m/z* range for the apex
+positions. Especially, the magnitude of at the *m/z* range around 750 Da is
+quite high.
 
-To evaluate the performance of the correspondence analysis we first identify
+To evaluate the performance of the correspondence analysis, we identify
 features for each of the standards, extract their EIC and plot them.
 
 ```{r eics_after_correspondence_standards}
@@ -1105,7 +1389,7 @@ standards_all_eic <- featureChromatograms(
     expandRt = 2, chunkSize = NR_CORES)
 
 #' Plot the EICs
-dr <- file.path(IMAGE_PATH, "EIC_standards/full/after_correspondence/")
+dr <- file.path(IMAGE_PATH, "EIC_standards/full/4_aftercorrespondence/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 for (i in seq_along(standards_all_match)) {
     png(paste0(dr, "EIC_", standards_all_match$abbreviation[i], ".png"),
@@ -1161,11 +1445,11 @@ print('nr of missing values after gap filling:')
 sum(is.na(featureValues(chris)))
 ```
 
-With `fillChromPeaks` we could thus rescue signal for all but `r
-sum(is.na(featureValues(chris)))` features.
+With `fillChromPeaks` we could thus rescue signal for all but
+`r sum(is.na(featureValues(chris)))` features.
 
-Another way to confirm gap-filling rescued signals, use QC sample signals as
-basis
+Another way to confirm gap-filling rescued signals, using pool sample signals as
+basis:
 
 ```{r Detected vs filled signal}
 #' Get only detected signal
@@ -1218,6 +1502,9 @@ summary(l)
 
 ## Removing features detected in blank
 
+As last step of the preprocessing workflow, we remove features detected in blank
+samples.
+
 ```{r eval = file.exists("chris_after_gap_filling.RData")}
 load(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))
 ```
@@ -1234,7 +1521,7 @@ for (i in seq_len(nrow(fts))) {
     }
 
 #' flagged features
-print('flagged samples:')
+print('nr of flagged samples:')
 sum(cont_vec, na.rm = TRUE)
 
 #' add column "possible_cont" to the feature definitions table
@@ -1242,9 +1529,63 @@ featureDefinitions(chris)$possible_cont <- cont_vec
 
 ```
 
-# Next steps
+# Summary of preprocessing quality
 
-separate blanks from others
+The quality of consecutive steps is visualy summarized here using the 2 EIC examples
+during the whole preprocessing workflow.
+
+Example 1: cystine
+
+1. afterchrompeak
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/1_afterchrompeak/EIC_cystine.png") ` )
+
+2. afterrefinement
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/2_afterrefinement/EIC_cystine.png") ` )
+
+3. afteralignment
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/3_afteralignment/EIC_cystine.png") ` )
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/full/3_afteralignment/EIC_cystine.png") ` )
+
+4. aftercorrespondence
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/full/4_aftercorrespondence/EIC_cystine.png") ` )
+
+
+Example 2: histidine
+
+1. afterchrompeak
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/1_afterchrompeak/EIC_histidine.png") ` )
+
+2. afterrefinement
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/2_afterrefinement/EIC_histidine.png") ` )
+
+3. afteralignment
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/Pool_batch/3_afteralignment/EIC_histidine.png") ` )
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/full/3_afteralignment/EIC_histidine.png") ` )
+
+4. aftercorrespondence
+
+![](`r file.path(IMAGE_PATH, "EIC_standards/full/4_aftercorrespondence/EIC_histidine.png") ` )
+
+
+
+# Data export
+
+The data is saved after preprocessing, both as Rdata objects, as well as a
+summarized experiment. The data is ready to use for normalization and
+(multivariate) statistics.
+
+## Save samples and blank Rdata
+
+separate blanks from other samples
 
 ```{r sep blanks and bio samples}
 blank_sample <- chris[blank_index, keepAdjustedRtime = TRUE,
@@ -1254,9 +1595,18 @@ chris <- chris[!blank_index, keepAdjustedRtime = TRUE,
 
 save(blank_sample, file = paste0(RDATA_PATH, "blank_chris.RData"))
 save(chris, file = paste0(RDATA_PATH, "samples_chris.RData"))
+
+#' write feature matrix for manual inspection !!!FINDME to see 130s peak!!!
+handle <- file.path(DATA_PATH, 'feat_matrix_chris_pos.txt')
+write.table(featureValues(chris)[1:5,1:5], file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+#' write feature information for manual inspection
+handle <- file.path(DATA_PATH, 'vm_chris_pos.txt')
+write.table(chromPeaks(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
 ```
 
-# Summarized experiment
+## Save Summarized experiment
 
 ```{r SummarizedExperiment}
 #' Extract results as a SummarizedExperiment
@@ -1274,7 +1624,6 @@ if (nrow(sampleData(blank_sample)) >= 1) {
     }
 
 ```
-
 
 
 # Session information
