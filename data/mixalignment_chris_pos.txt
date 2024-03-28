@@ -1,0 +1,29 @@
+,name,abbreviation,formula,POS,NEG,RT,data_set,sample,operator,version,quality_NEG,quality_POS,mz,mzmin,mzmax,rtmin,rtmax
+ADMA,ADMA,ADMA,C8H18N4O2,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,203.150252,203.140252,203.160252,157,187
+alanine,Alanine,alanine,C3H7NO2,[M+H]+,[M-H+HCOONa]-,164,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,90.054954464,90.034954464,90.074954464,155,185
+alanine_13C_15N,"L-Alanine (13C3, 99%; 15N, 99%)",alanine_13C_15N,93.0548,[M+H]+,[M-H]-,165,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,94.062076,94.042076,94.082076,152,182
+arginine,Arginine,arginine,C6H14N4O2,[M+H]+,[M-H]-,185,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,0_perfect,175.118951688,175.098951688,175.138951688,172,202
+arginine_13C_15N,"L-Arginine HCl (13C6, 99%; 15N4, 99%)",arginine_13C_15N,184.1199,[M+H]+,[M-H]-,183,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,185.127176,185.107176,185.147176,168,198
+aspartic_13C_15N,"L-Aspartic acid (13C4, 99%; 15N, 99%)",aspartic_13C_15N,138.048,[M+H]+,[M-H]-,179,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,139.055276,139.035276,139.075276,164,194
+caffeine,Caffeine,caffeine,194.0804,[M+H]+,NA,33,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,3_bad,195.087676,195.067676,195.107676,20,50
+carnitine_c4,C4 Carnitine,carnitine_c4,C11H21NO4,[M+H]+,NA,34,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,3_bad,2_medium,232.154334152,232.134334152,232.174334152,22,52
+cystine,Cystine,cystine,C6H12N2O4S2,[M+H]+,[M-H]-,209,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,1_good,241.031124864,241.011124864,241.051124864,196,226
+cystine_13C_15N,"L-Cystine (13C6, 99%; 15N2, 99%)",cystine_13C_15N,248.038,[M+H]+,[M-H]-,208,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,249.045276,249.025276,249.065276,193,223
+glutamic_13C_15N,"L-Glutamic acid (13C5, 99%; 15N, 99%)",glutamic_13C_15N,153.067,[M+H]+,[M-H]-,170,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,154.074276,154.054276,154.094276,155,185
+glutamine,Glutamine,glutamine,C5H10N2O3,[M+H]+,[M-H]-,178,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,147.07641818,147.05641818,147.09641818,163,193
+glycero_phosphocholine,Glycero-phosphocholine,glycero_phosphocholine,257.10282,[M+H]+,[M+Cl]-,189,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,258.110096,258.090096,258.130096,174,204
+glycine,Glycine,glycine,C2H5NO2,[M+H]+,[M-H]-,166,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,76.0393044,76.0193044,76.0593044,157,187
+glycine_13C_15N,"Glycine (13C2, 99%; 15N, 99%)",glycine_13C_15N,78.0358,[M+H]+,NA,164,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,3_bad,1_good,79.043076,79.023076,79.063076,152,182
+histidine,Histidine,histidine,C6H9N3O2,[M+H]+,[M-H]-,188,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,156.076752528,156.056752528,156.096752528,173,203
+histidine_13C_15N,"L-Histidine HCl H2O (13C6; 15N3, 99%)",histidine_13C_15N,164.0807,[M+H]+,[M-H]-,185,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,165.087976,165.067976,165.107976,170,200
+lysine_13C_15N,"L-Lysine 2HCl (13C6, 99%; 15N2, 99%)",lysine_13C_15N,154.1197,[M+H]+,[M-H]-,184,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,0_perfect,155.126976,155.106976,155.146976,169,199
+proline,Proline,proline,115.06333,[M+H]+,[M-H]-,164,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,116.070606,116.050606,116.090606,152,182
+serine,Serine,serine,105.04259,[M+H]+,[M-H]-,177,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,106.049866,106.029866,106.069866,162,192
+sphingosine,Sphingosine,sphingosine,299.28243,[M+H]+,[M+CHO2]-,30,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,3_bad,300.289706,300.269706,300.309706,15,45
+taurine,Taurine,taurine,125.01466,[M+H]+,[M-H]-,170,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,126.021936,126.001936,126.041936,155,185
+threonine_13C_15N,"L-Threonine (13C4, 99%; 15N, 99%)",threonine_13C_15N,124.0687,[M+H]+,[M-H]-,169,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,125.075976,125.055976,125.095976,154,184
+tryptophan,Tryptophan,tryptophan,C11H12N2O2,[M+H]+,[M-H]-,153,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,205.097153624,205.077153624,205.117153624,140,170
+tyrosine_13C_15N,"L-Tyrosine (13C9, 99%; 15N, 99%)",tyrosine_13C_15N,191.1011,[M+H]+,[M-H]-,163,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,192.108376,192.088376,192.128376,151,181
+valine_13C_15N,"L-Valine (13C5, 99%; 15N, 99%)",valine_13C_15N,123.0928,[M+H]+,[M-H]-,164,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,124.100076,124.080076,124.120076,149,179
+5-Oxoproline,oxoproline,oxoproline,C5H7NO3,[M+H]+,[M-H]-,71,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,130.049869084,130.048568585309,130.051169582691,51,91
+
