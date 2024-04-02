@@ -1,0 +1,74 @@
+mix,name,abbreviation,HMDB.code,formula,POS,NEG,RT,data_set,sample,operator,version,quality_POS,quality_NEG,note,mass,mz,mzmin,mzmax,rtmin,rtmax
+2,C4 Carnitine,carnitine_c4,HMDB0000736,C11H21NO4,[M+H]+,NA,35,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,Sigma Aldrich 51085 (Isobutyryl-L-carnitine)  chemical formula is of Butyrylcarnitine,231.147058152,232.154334152,232.153173380329,232.155494923671,15,55
+4,Putrescine,putrescine,HMDB0001414,C4H12N2,[M+H-NH3]+,NA,165,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,,88.100048384,72.080775734,72.0804153301213,72.0811361378787,145,185
+7,ADMA,ADMA,HMDB0001539,C8H18N4O2,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,202.142975816,203.150251816,203.149236064741,203.151267567259,152,192
+7,Caffeine,caffeine,HMDB0001847,C8H10N4O2,[M+H]+,NA,35,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,3_bad,,194.08037556,195.08765156,195.086676121742,195.088626998258,15,55
+7,Glycero-phosphocholine,glycero_phosphocholine,HMDB0000086,C8H20NO6P,[M+H]+,[M+Cl]-,189,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,257.10282399,258.11009999,258.1088094395,258.1113905405,169,209
+7,Serine,serine,HMDB0000187,C3H7NO3,[M+H]+,[M-H]-,177,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,105.042593084,106.049869084,106.049338834655,106.050399333345,157,197
+7,Sphingosine,sphingosine,HMDB0000252,C18H37NO2,[M+H]+,[M+CHO2]-,30,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,3_bad,,299.282429424,300.289705424,300.288203975473,300.291206872527,10,50
+7,Taurine,taurine,HMDB0000251,C2H7NO3S,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,125.014664084,126.021940084,126.0213099743,126.0225701937,152,192
+8,Inosine,inosine,HMDB0000195,C10H12N4O5,[M+Na]+,[M-H]-,146,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,268.080769484,291.069989484,291.068534134053,291.071444833947,126,166
+9,Pipecolic acid,pipecolic,HMDB0000070,C6H11NO2,[M+H]+,[M-H]-,169,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,129.078978592,130.086254592,130.085604160727,130.086905023273,149,189
+9,Proline,proline,HMDB0000162,C5H9NO2,[M+H]+,[M-H]-,163,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,115.063328528,116.070604528,116.070024174977,116.071184881023,143,183
+11,SDMA,SDMA,HMDB0003334,C8H18N4O2,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,202.142975816,203.150251816,203.149236064741,203.151267567259,152,192
+12,Guanidoacetic acid,guanidoacetic,HMDB0000128,C3H7N3O2,[M+H]+,[M-H]-,170,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,117.053826464,118.061102464,118.060512158488,118.061692769512,150,190
+13,Sorbitol,sorbitol,HMDB0000247,C6H14O6,[M+Na]+,[M-H]-,165,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,182.079038168,205.068258168,205.067232826709,205.069283509291,145,185
+14,Acetylcarnitine,acetylcarnitine,HMDB0000201,C9H17NO4,[M+H]+,NA,35,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,,203.115758024,204.123034024,204.12201340883,204.12405463917,15,55
+14,Indolelactic acid,indolelactic,HMDB0000671,C11H11NO3,[M+H]+,[M-H]-,37,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,205.073893212,206.081169212,206.080138806154,206.082199617846,17,57
+15,alpha-Aminoadipic acid,aminoadipic,HMDB0000510,C6H11NO4,[M+H]+,[M-H]-,170,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,161.068807832,162.076083832,162.075273451581,162.076894212419,150,190
+15,Isovalerylglycine,isovalerylglycine,HMDB0000678,C7H13NO3,[M+H]+,[M-H]-,37,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,159.089543276,160.096819276,160.096018791904,160.097619760096,17,57
+17,3-Hydroxy-DL-kynurenine,hydroxykynurenine_3,HMDB0000732,C10H12N2O4,[M+H]+,[M-H]-,163,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,224.079706864,225.086982864,225.085857429086,225.088108298914,143,183
+17,Succinylacetone,succinylacetone,HMDB0000635,C7H10O4,[M+Na]+,[M-H]-,35,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,158.0579088,181.0471288,181.046223564356,181.048034035644,15,55
+10,Salicylic acid,salicylic,HMDB0001895,C7H6O3,[M+H]+,[M-H]-,34,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,0_perfect,,138.031694052,139.038970052,139.03827485715,139.03966524685,14,54
+2,Hypoxanthine,hypoxanthine,HMDB0000157,C5H4N4O,[M+H]+,[M-H]-,126,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,136.038510748,137.045786748,137.045101519066,137.046471976934,106,146
+11,L-Carnitine,carnitine,HMDB0000062,C7H15NO3,[M+H]+,NA,130,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,,161.10519334,162.11246934,162.111658777653,162.113279902347,110,150
+17,Epinephrine,epinephrine,HMDB0000068,C9H13NO3,[M+H]+,[M-H]-,144,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,2_medium,,183.089543276,184.096819276,184.095898791904,184.097739760096,124,164
+6,Tryptophan,tryptophan,HMDB0000929,C11H12N2O2,[M+H]+,[M-H]-,155,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,204.089877624,205.097153624,205.096128138232,205.098179109768,135,175
+7,Methionine,methionine,HMDB0000696,C5H11NO2S,[M+H]+,[M-H]-,163,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,149.051049592,150.058325592,150.057575300372,150.059075883628,143,183
+2,Valine,valine,HMDB0000883,C5H11NO2,[M+H]+,[M-H]-,166,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,117.078978592,118.086254592,118.085664160727,118.086845023273,146,186
+3,Alanine,alanine,HMDB0000161,C3H7NO2,[M+H]+,[M-H+HCOONa]-,163,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,89.047678464,90.054954464,90.0545041892277,90.0554047387723,143,183
+2,Glycine,glycine,HMDB0000123,C2H5NO2,[M+H]+,[M-H]-,167,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,2_medium,,75.0320284,76.0393044,76.038924203478,76.039684596522,147,187
+5,Threonine,threonine,HMDB0000167,C4H9NO3,[M+H]+,[M-H]-,170,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,119.058243148,120.065519148,120.064918820404,120.066119475596,150,190
+4,Glutamine,glutamine,HMDB0000641,C5H10N2O3,[M+H]+,[M-H]-,178,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,146.06914218,147.07641818,147.075682797909,147.077153562091,158,198
+1,Acetylhistidine,acetylhistidine,HMDB0032055,C8H11N3O3,[M+H]+,[M-H]-,180,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,2_medium,,197.080041212,198.087317212,198.086326775414,198.088307648586,160,200
+3,Citrulline,citrulline,HMDB0000904,C6H13N3O3,[M+H]+,[M-H]-,179,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,175.095691276,176.102967276,176.102086761164,176.103847790836,159,199
+6,Arginine,arginine,HMDB0000517,C6H14N4O2,[M+H]+,[M-H]-,185,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,1_good,,174.111675688,175.118951688,175.118076093242,175.119827282758,165,205
+2,Histidine,histidine,HMDB0000177,C6H9N3O2,[M+H]+,[M-H]-,188,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,155.069476528,156.076752528,156.075972144237,156.077532911763,168,208
+6,Cystine,cystine,HMDB0000192,C6H12N2O4S2,[M+H]+,[M-H]-,210,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,0_perfect,,240.023848864,241.031124864,241.029919708376,241.032330019624,190,230
+7,3-Methylhistidine,methylhistidine_3,HMDB0000479,C7H11N3O2,[M+H]+,[M-H]-,186,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,169.085126592,170.092402592,170.091552129987,170.093253054013,166,206
+13,1-Methylhistidine,methylhistidine_1,HMDB0000001,C7H11N3O2,[M+H]+,[M-H]-,182,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,169.085126592,170.092402592,170.091552129987,170.093253054013,162,202
+4,Acetylalanine,acetylalanine_NL,HMDB0000766,C5H9NO3,[M+H]+,[M-H]-,37,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,2_medium,,131.058243148,132.065519148,132.064858820404,132.066179475596,17,57
+10,N-Acetylornithine,acetylornithine,HMDB0003357,C7H14N2O3,[M+H]+,[M-H]-,170,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,174.100442308,175.107718308,175.106842769408,175.108593846592,150,190
+6,Asparagine,asparagine,HMDB0000168,C4H8N2O3,[M+H]+,[M-H]-,180,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,132.053492116,133.060768116,133.060102812159,133.061433419841,160,200
+10,L-Aspartic Acid,aspartic,HMDB0000191,C4H7NO4,[M+H]+,[M-H]-,179,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,133.037507704,134.044783704,134.044113480081,134.045453927919,159,199
+1,Betaine,betaine,HMDB0000043,C5H11NO2,[M+H]+,[M+CHO2]-,163,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,,117.078978592,118.086254592,118.085664160727,118.086845023273,143,183
+12,Carnosine,carnosine,HMDB0000033,C9H14N4O3,[M+H]+,[M-H]-,178,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,226.106590308,227.113866308,227.112730738668,227.115001877332,158,198
+5,Corticosterone,corticosterone,HMDB0001547,C21H30O4,[M+H]+,[M+CHO2]-,27,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,3_bad,,346.21440944,347.22168544,347.219949331573,347.223421548427,7,47
+1,Dimethylglycine,dimethylglycine,HMDB0000092,C4H9NO2,[M+H]+,[M-H]-,167,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,,103.063328528,104.070604528,104.070084174977,104.071124881023,147,187
+12,Galactitol,galactitol,HMDB0000107,C6H14O6,[M+Na]+,[M-H]-,167,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,182.079038168,205.068258168,205.067232826709,205.069283509291,147,187
+1,L-Glutamic Acid,glutamic,HMDB0000148,C5H9NO4,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,147.053157768,148.060433768,148.059693465831,148.061174070169,152,192
+9,Guanosine,guanosine,HMDB0000133,C10H13N5O5,[M+H]+,[M-H]-,160,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,283.091668516,284.098944516,284.097524021277,284.100365010723,140,180
+12,Homocysteine,homocysteine,HMDB0000742,C4H9NO2S,[M+H]+,[M-H]-,165,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,135.035399528,136.042675528,136.041995314622,136.043355741378,145,185
+2,Hydroxyproline,hydroxyproline,HMDB0000725,C5H9NO3,[M+H]+,[M-H]-,172,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,131.058243148,132.065519148,132.064858820404,132.066179475596,152,192
+13,Indoleacetic acid,indoleacetic,HMDB0000197,C10H9NO2,[M+H]+,[M-H]-,35,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,0_perfect,,175.063328528,176.070604528,176.069724174977,176.071484881023,15,55
+14,Levodopa,levodopa,HMDB0000181,C9H11NO4,[M+H]+,[M-H]-,180,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,197.068807832,198.076083832,198.075093451581,198.077074212419,160,200
+11,Lysine,lysine,HMDB0000182,C6H14N2O2,[M+H]+,[M-H]-,185,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,146.105527688,147.112803688,147.112068123982,147.113539252018,165,205
+8,Ornithine,ornithine,HMDB0000214,C5H12N2O2,[M+H]+,[M-H]-,190,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,132.089877624,133.097153624,133.096488138232,133.097819109768,170,210
+3,5-Oxoproline,oxoproline,HMDB0000267,C5H7NO3,[M+H]+,[M-H]-,70,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,,129.042593084,130.049869084,130.049218834655,130.050519333345,50,90
+6,Sphingosine-1-phosphate,sphingosine_phosphate,HMDB0000277,C18H38NO5P,[M+H]+,[M-H]-,145,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,2_medium,,379.248759946,380.256035946,380.25413466582,380.25793722618,125,165
+12,Tryptamine,tryptamine,HMDB0000303,C10H12N2,[M+H-NH3]+,NA,32,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,3_bad,,160.100048384,144.080775734,144.080055330121,144.081496137879,12,52
+8,Tyrosine,tyrosine,HMDB0000158,C9H11NO3,[M+H]+,[M-H]-,165,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,181.073893212,182.081169212,182.080258806154,182.082079617846,145,185
+1,Xanthine,xanthine,HMDB0000292,C5H4N4O2,[M+H]+,[M-H]-,133,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,152.033425368,153.040701368,153.039936164493,153.041466571507,113,153
+,"L-Valine (13C5, 99%; 15N, 99%)",valine_13C_15N,,,[M+H]+,[M-H]-,164,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,123.0928,124.100076,124.09945549962,124.10069650038,144,184
+,"L-Tyrosine (13C9, 99%; 15N, 99%)",tyrosine_13C_15N,,,[M+H]+,[M-H]-,163,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,191.1011,192.108376,192.10741545812,192.10933654188,143,183
+,"L-Alanine (13C3, 99%; 15N, 99%)",alanine_13C_15N,,,[M+H]+,[M-H]-,165,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,2_medium,,93.0548,94.062076,94.06160568962,94.06254631038,145,185
+,"Glycine (13C2, 99%; 15N, 99%)",glycine_13C_15N,,,[M+H]+,NA,164,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,3_bad,,78.0358,79.043076,79.04268078462,79.04347121538,144,184
+,"L-Threonine (13C4, 99%; 15N, 99%)",threonine_13C_15N,,,[M+H]+,[M-H]-,169,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,124.0687,125.075976,125.07535062012,125.07660137988,149,189
+,"L-Glutamic acid (13C5, 99%; 15N, 99%)",glutamic_13C_15N,,,[M+H]+,[M-H]-,170,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,153.067,154.074276,154.07350562862,154.07504637138,150,190
+,"L-Aspartic acid (13C4, 99%; 15N, 99%)",aspartic_13C_15N,,,[M+H]+,[M-H]-,179,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,,138.048,139.055276,139.05458072362,139.05597127638,159,199
+,"L-Arginine HCl (13C6, 99%; 15N4, 99%)",arginine_13C_15N,,,[M+H]+,[M-H]-,183,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,184.1199,185.127176,185.12625036412,185.12810163588,163,203
+,"L-Lysine 2HCl (13C6, 99%; 15N2, 99%)",lysine_13C_15N,,,[M+H]+,[M-H]-,184,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,1_good,,154.1197,155.126976,155.12620036512,155.12775163488,164,204
+,"L-Histidine HCl H2O (13C6; 15N3, 99%)",histidine_13C_15N,,,[M+H]+,[M-H]-,185,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,164.0807,165.087976,165.08715056012,165.08880143988,165,205
+,"L-Cystine (13C6, 99%; 15N2, 99%)",cystine_13C_15N,,,[M+H]+,[M-H]-,208,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,248.038,249.045276,249.04403077362,249.04652122638,188,228
+4,Riboflavin,riboflavin,HMDB0000244,C17H20N4O6,[M+H]+,[M-H]-,145,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,0_perfect,0_perfect,,376.13828436,377.14556036,377.141788904396,377.149331815604,125,165
+
