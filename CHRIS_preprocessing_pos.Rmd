@@ -145,11 +145,13 @@ chris <- chris[sampleData(chris)$sample_type %in% c("Blank", "Pool", "Study")]
 chris <- filterRt(chris, c(10, 250))
 
 #' Select the middle batch only (see PCA overview)
-chris <- chris[grep(unique(sampleData(chris)$batch_id)[45],
-                    sampleData(chris)$batch_id, fixed = TRUE)]
+chris <- chris[grep("^BATCH008[7,8,9]", sampleData(chris)$batch_id)]
+#sampleData(t)
+#chris <- chris[grep(unique(sampleData(chris)$batch_id)[45],
+#                    sampleData(chris)$batch_id, fixed = TRUE)]
 
 print('batch_id:')
-sampleData(chris)$batch_id[45]
+unique(sampleData(chris)$batch_id)
 print('nr of samples in small subset of chris:')
 length(chris)
 
@@ -754,7 +756,7 @@ the retention times for the selected chromatographic peak for each sample.
 
 
 ```{r alignment_using_selected_standards}
-#' creating matrix for rt alignment
+#' load matrix for rt alignment
 #mixAlignment_df <- read.delim(file.path(DATA_PATH, "Mix_alignment.txt"))
 mixAlignment_df <- read.delim(file.path(DATA_PATH, "mixalignment_chris_pos.txt"), sep = ',') #new file, change included standards
 mixAlignment_df <- mixAlignment_df[!is.na(mixAlignment_df$POS), ]
