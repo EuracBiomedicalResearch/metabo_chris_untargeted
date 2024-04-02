@@ -18,6 +18,12 @@ bibliography: references.bib
 **Compiled**: `r date()`
 
 ```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+library("BiocStyle")
+library("kableExtra")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, time_it = TRUE)
 knitr::knit_hooks$set(time_it = local({
   now <- NULL
   function(before, options) {
@@ -33,13 +39,6 @@ knitr::knit_hooks$set(time_it = local({
     }
   }
 }))
-
-suppressMessages(library("BiocStyle"))
-suppressMessages(library("kableExtra"))
-suppressMessages(library("knitr"))
-suppressMessages(library("rmarkdown"))
-opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
-               cache = FALSE, fig.width = 7, fig.height = 7, time_it = TRUE)
 
 ```
 
@@ -73,6 +72,7 @@ dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
 
 #' Path to the data
 DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS'     #'data' #FINDME!
+## DATA_PATH <- "data"
 
 ```
 
@@ -80,21 +80,21 @@ DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS'     #'data' #FINDME!
 
 ```{r packages, message=FALSE}
 #' Load libraries
-suppressMessages(library(magick))
-suppressMessages(library(MetaboAnnotation))
-suppressMessages(library(MetaboCoreUtils))
-suppressMessages(library(MsBackendSql))
-suppressMessages(library(MsExperiment))
-suppressMessages(library(MsQuality))
-suppressMessages(library(pander))
-suppressMessages(library(pheatmap))
-suppressMessages(library(RColorBrewer))
-suppressMessages(library(readxl))
-suppressMessages(library(RSQLite))
-suppressMessages(library(Spectra))
-suppressMessages(library(SummarizedExperiment))
-suppressMessages(library(vioplot))
-suppressMessages(library(xcms))
+library(magick)
+library(MetaboAnnotation)
+library(MetaboCoreUtils)
+library(MsBackendSql)
+library(MsExperiment)
+library(MsQuality)
+library(pander)
+library(pheatmap)
+library(RColorBrewer)
+library(readxl)
+library(RSQLite)
+library(Spectra)
+library(SummarizedExperiment)
+library(vioplot)
+library(xcms)
 
 ```
 
@@ -185,12 +185,16 @@ For which we define colors.
 col_sampletype <- brewer.pal(8, "Accent")[c(1, 5, 8)]
 names(col_sampletype) <- c("Study", "Pool", "Blank")
 
-#' match color to sample_type
-col_samples <- col_sampletype[sampleData(chris)$sample_type]
-
 #' Define a unique color for each batch.
 col_batch <- rainbow(length(unique(sampleData(chris)$batch_id)))
 names(col_batch) <- unique(sampleData(chris)$batch_id)
+
+#' Define a color for each sample
+col_samples <- col_sampletype[sampleData(chris)$sample_type]
+col_batches <- col_batch[sampleData(chris)$batch_id]
+
+pool_index <- which(sampleData(chris)$sample_type == "Pool")
+batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
 
 ```
 
@@ -375,13 +379,13 @@ legend("topright", inset=c(-0,0), col = col_sampletype,
 
 OK, apply the peak picking using these parameters to all data.
 
-```{r findchrompeaks_all_data, echo=TRUE, eval = !file.exists("chris_after_peakdetect.RData")}
+```{r findchrompeaks_all_data, echo=TRUE, eval = !file.exists(paste0(RDATA_PATH, "chris_after_peakdetect.RData"))}
 chris <- findChromPeaks(chris, param = param, chunkSize = NR_CORES)
 save(chris, file = paste0(RDATA_PATH, "chris_after_peakdetect.RData"))
 
 ```
 
-```{r load peakpick rdata, echo = FALSE, eval = file.exists("chris_after_peakdetect.RData")}
+```{r load peakpick rdata, echo = FALSE, eval = file.exists(paste0(RDATA_PATH, "chris_after_peakdetect.RData"))}
 #' Loading the already peak-detected data
 load(paste0(RDATA_PATH, "chris_after_peakdetect.RData"))
 
@@ -449,6 +453,68 @@ legend("topright", inset=c(-0,0), col = col_sampletype,
 
 ```
 
+```{r check_standards_dilution, echo = FALSE, eval = FALSE}
+#' Create EICs for all standards and plot them to evaluate a) presence of the
+#' ion in the current batch and b) check/adjust its retention time
+standards_all <- read.delim(file.path(DATA_PATH, "standards_dilution.txt"),
+                            sep = "\t")
+standards_all <- standards_all[!is.na(standards_all$POS), ]
+standards_all$mass <- calculateMass(standards_all$formula)
+standards_all$mz <- mapply(standards_all$mass, standards_all$POS, FUN = mass2mz)
+
+#' Extract EICs, using a 20ppm m/z range.
+standards_all$mzmin <- standards_all$mz - MsCoreUtils::ppm(standards_all$mz, 10)
+standards_all$mzmax <- standards_all$mz + MsCoreUtils::ppm(standards_all$mz, 10)
+standards_all$rtmin <- standards_all$RT - 10
+standards_all$rtmax <- standards_all$RT + 10
+standards_all$rtmin[is.na(standards_all$rtmine)] <- -Inf
+standards_all$rtmax[is.na(standards_all$rtmine)] <- Inf
+
+chris_batch <- split(chris, sampleData(chris)$batch_id)
+
+#' Iterate over batches to create EIC plots separate for each batch.
+lapply(chris_batch, function(z) {
+
+    #' Extract EICs, full rt range, and only restricted to expected RT.
+    standards_all_eic_full <- chromatogram(
+        z, mz = cbind(standards_all$mzmin, standards_all$mzmax),
+        chunkSize = NR_CORES)
+    standards_all_eic <- chromatogram(
+        z, mz = cbind(standards_all$mzmin, standards_all$mzmax),
+        rt = cbind(standards_all$rtmin, standards_all$rtmax),
+        chunkSize = NR_CORES)
+
+    dr <- file.path("images", "standards_all_eics", sampleData(z)$batch_id[1L])
+    dir.create(dr, recursive = TRUE)
+
+    for (i in seq_len(nrow(standards_all))) {
+        fl <- paste0(i, "-", standards_all$name[i], ".png")
+        png(file.path(dr, fl), width = 14, height = 7, units = "cm", res = 600,
+            pointsize = 4)
+        par(mfrow = c(1, 2))
+        tmp <- standards_all_eic_full[i, ]
+        plot(tmp,
+             col = paste0(col_samples, 60),
+             peakCol = col_samples[chromPeaks(tmp)[, "sample"]],
+             peakBg = paste0(col_samples[chromPeaks(tmp)[, "sample"]], 10))
+        grid()
+        abline(v = standards_all$RT[i], col = "red", lty = 2)
+        tmp <- standards_all_eic[i, ]
+        plot(tmp, main = standards_all$name[i],
+             col = paste0(col_samples, 60),
+             peakCol = col_samples[chromPeaks(tmp)[, "sample"]],
+             peakBg = paste0(col_samples[chromPeaks(tmp)[, "sample"]], 10))
+        grid()
+        abline(v = standards_all$RT[i], col = "red", lty = 2)
+        dev.off()
+    }
+})
+
+#' Based on these EICs the data/standatds_chris_pos_batch.txt file should be
+#' updated adding observed retention times for each batch as a new column.
+#' This file might be used at a later stage for annotation of features.
+```
+
 Evaluate the quality of all the (internal) standards, see list of previously
 defined 'good' standards in the general_data_overview report.
 load this file first.
@@ -512,13 +578,16 @@ dr <- file.path(IMAGE_PATH, "EIC_standards/Pool_batch/1_afterchrompeak/")
 dir.create(dr, recursive = TRUE, showWarnings = FALSE)
 
 for (i in seq_len(nrow(standards_chris_pos))) {
-    png(paste0(dr, "EIC_", standards_chris_pos$abbreviation[i], ".png"),
+    nm <- standards_chris_pos$name[i]
+    nm <- gsub("%", "perc", nm, fixed = TRUE)
+    png(paste0(dr, "EIC_", nm, ".png"),
         width = 12, height = 8, units = "cm", res = 600, pointsize = 4)
     plot(eics[i], main = standards_chris_pos$name[i],
          col = paste0(batches_pool, 60),
          peakCol = col_batches[chromPeaks(eics[i])[, "sample"]],
          peakBg = paste0(col_batches[chromPeaks(eics[i])[, "sample"]], 10))
     grid()
+    abline(v = standards_chris_pos$RT[i], col = "#ff000080", lty = 2)
     legend("topright", col = col_batch,
            legend = names(col_batch), lty = 1)
     legend("topleft",
@@ -541,13 +610,13 @@ grid()
 
 #' average nr of peaks per sample
 print('median nr of peaks per sample:')
-format(round(median(table(chromPeaks(chris))), 3), 3) #FINDME!!! fix
+format(round(median(table(chromPeaks(chris)[, "sample"])), 3), 3)
 
 ```
 
 The number of detected peaks looks similar in all the samples.
 After initial peak detection, the median peaks retieved per sample was
-`r format(round(mean(table(chromPeaks(chris))), 3), 3)`.  #FINDME!!! fix
+`r format(round(mean(table(chromPeaks(chris)[, "sample"])), 3), 3)`.
 
 Look at the number of detected peak per files in the 50-150 rt window. As this
 window is underrepresented by (internal) standards. The spectra of the `chris`
@@ -632,7 +701,7 @@ detection results) using more stringent parameters. The peak post-processing is
 able to fuse the signal for neighboring peaks, while keeping the peaks for the
 different isomers seperately.
 
-```{r refine_chrom_peaks,  message = FALSE, eval = !file.exists("chris_after_refine.RData")}
+```{r refine_chrom_peaks,  message = FALSE, eval = !file.exists(paste0(RDATA_PATH, "chris_after_refine.RData"))}
 #' set up the parameter
 param <- MergeNeighboringPeaksParam(expandRt = 5,
                                     expandMz = 0.001,
@@ -643,7 +712,7 @@ chris <- refineChromPeaks(chris, param = param, chunkSize = NR_CORES)
 save(chris, file = paste0(RDATA_PATH, "chris_after_refine.RData"))
 ```
 
-```{r load_refine_chrom_peaks, include=FALSE, eval = file.exists("chris_after_refine.RData")}
+```{r load_refine_chrom_peaks, include=FALSE, eval = file.exists(paste0(RDATA_PATH, "chris_after_refine.RData"))}
 load(paste0(RDATA_PATH, "chris_after_refine.RData"))
 ```
 
@@ -656,12 +725,12 @@ grid()
 
 #' average nr of peaks per sample
 print('median nr of peaks per sample after refinement:')
-format(round(median(table(chromPeaks(chris))), 3), 3) #FINDME!!! fix
+format(round(median(table(chromPeaks(chris)[, "sample"])), 3), 3)
 
 ```
 
 After refinement, the average peaks retieved per sample was
-`r format(round(mean(table(chromPeaks(chris))), 3), 3)`. #FINDME!!! fix
+`r format(round(mean(table(chromPeaks(chris)[, "sample"])), 3), 3)`.
 
 create EIC plots for all standards in pool samples after refinement.
 
@@ -716,6 +785,7 @@ present behind the last samples of each batch as well.
 
 
 ```{r reorder_data_set}
+## jo: I would remove the re-ordering of the code since we don't need it - and will confuse us
 #' keep a raw chris object to compare before/after alignment
 chris_raw <- chris
 
@@ -744,6 +814,58 @@ col_batches <- col_batch[sampleData(chris)$batch_id]
 pool_index <- which(sampleData(chris)$sample_type == "Pool")
 batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
 
+```
+
+```{r, eval = FALSE, echo = FALSE}
+#' Check if we could find some signal (even if not from a standard) between
+#' 70 and 150 seconds we could use for alignment.
+tmp <- chris[pool_index]
+
+#' Identify chrompeaks with a high signal in this region.
+cpks <- chromPeaks(tmp, rt = c(70, 150))
+cpks <- cpks[cpks[, "maxo"] > 10000, ]
+
+#' Group the chrom peaks by m/z
+mz_groups <- MsCoreUtils::group(cpks[, "mz"], ppm = 10)
+cpks_groups <- split.data.frame(cpks, mz_groups)
+
+#' Extract the median m/z and the rt range for all
+tmp_pks <- lapply(
+    cpks_groups, function(z)
+        c(median(z[, "mz"]), min(z[, "rtmin"]), max(z[, "rtmax"]))) |>
+    do.call(what = rbind)
+tmp_pks[, 2] <- tmp_pks[, 2] - 10
+tmp_pks[, 3] <- tmp_pks[, 3] + 10
+
+#' extract EICs.
+tmp_eics <- chromatogram(
+    chris, mz = cbind(tmp_pks[, 1] - MsCoreUtils::ppm(tmp_pks[, 1], 10),
+                      tmp_pks[, 1] + MsCoreUtils::ppm(tmp_pks[, 1], 10)),
+    rt = tmp_pks[, 2:3])
+dr <- file.path(IMAGE_PATH, "alignment_features")
+dir.create(dr, recursive = TRUE)
+
+for (i in seq_len(nrow(tmp_pks))) {
+    png(paste0(dr, "/EIC_", i, ".png"),
+        width = 12, height = 8, units = "cm", res = 600, pointsize = 4)
+    eic <- tmp_eics[i]
+    plot(eic,
+         col = paste0(col_samples, 60),
+         peakCol = col_samples[chromPeaks(eic)[, "sample"]],
+         peakBg = paste0(col_samples[chromPeaks(eic)[, "sample"]], 10))
+    grid()
+    legend("topright", col = col_batch,
+           legend = names(col_batch), lty = 1)
+    legend("topleft",
+           legend = paste0("m/z: ", format(fData(eic)$mzmin, 4),
+                           " - ", format(fData(eic)$mzmax, 4)))
+    dev.off()
+}
+
+#' What would define/qualify a peak as a good anchor peak?
+#' - clear, strong signal
+#' - not too broad peak
+#' - no other peak left/right of the actual peak
 ```
 
 First, we load a manually pre-defined peak matrix of (internal) standards
@@ -1430,12 +1552,12 @@ sum(is.na(featureValues(chris)))
 
 We can see quite a large amount of NA values in our data set.
 
-```{r gap_filling, eval = !file.exists("chris_after_gap_filling.RData")}
+```{r gap_filling, eval = !file.exists(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))}
 chris <- fillChromPeaks(chris, param = ChromPeakAreaParam(), chunkSize = NR_CORES)
 save(chris, file = paste0(RDATA_PATH, "chris_after_gap_filling.RData"))
 ```
 
-```{r eval = file.exists("chris_after_gap_filling.RData")}
+```{r eval = file.exists(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))}
 load(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))
 ```
 
@@ -1505,7 +1627,7 @@ summary(l)
 As last step of the preprocessing workflow, we remove features detected in blank
 samples.
 
-```{r eval = file.exists("chris_after_gap_filling.RData")}
+```{r eval = file.exists(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))}
 load(paste0(RDATA_PATH, "chris_after_gap_filling.RData"))
 ```
 
