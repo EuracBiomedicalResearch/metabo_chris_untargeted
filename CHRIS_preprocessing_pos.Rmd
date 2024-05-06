@@ -59,7 +59,7 @@ mode will be performed in this Rmarkdown document.
 ```{r directories, echo = FALSE}
 #' General settings
 filename <- "CHRIS_preprocessing_pos"
-BATCHNR <- "QCplus3"   #FINDME!!!
+BATCHNR <- "All"   #FINDME!!!
 
 #' Path to save images to; remove if exists.
 IMAGE_PATH <- paste0("images/", filename, "/", BATCHNR, "/")
@@ -1720,7 +1720,7 @@ save(chris, file = paste0(RDATA_PATH, "samples_chris.RData"))
 
 #' write feature matrix for manual inspection
 handle <- file.path(DATA_PATH, 'vmatrix_chris_pos.txt')
-write.table(featureValues(chris)[1:5,1:5], file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+write.table(featureValues(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
 
 #' write feature information for manual inspection
 handle <- file.path(DATA_PATH, 'vm_chris_pos.txt')
@@ -1748,7 +1748,7 @@ if (nrow(sampleData(blank_sample)) >= 1) {
 ```
 
 
-<!---
+
 
 # Summary of preprocessing quality
 
@@ -1797,7 +1797,7 @@ Example 2: histidine
 
 ![](`r file.path(IMAGE_PATH, "EIC_standards/full/4_aftercorrespondence/EIC_histidine.png") ` )
 
--->
+
 
 # Session information
 
