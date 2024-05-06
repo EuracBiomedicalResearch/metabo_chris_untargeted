@@ -1724,7 +1724,7 @@ write.table(featureValues(chris), file=handle, sep ="\t", row.names = FALSE, col
 
 #' write feature information for manual inspection
 handle <- file.path(DATA_PATH, 'vm_chris_pos.txt')
-write.table(chromPeaks(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+write.table(featureDefinitions(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
 
 ```
 
