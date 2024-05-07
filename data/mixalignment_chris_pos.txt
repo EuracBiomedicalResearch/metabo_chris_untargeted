@@ -25,7 +25,5 @@ threonine_13C_15N,"L-Threonine (13C4, 99%; 15N, 99%)",threonine_13C_15N,124.0687
 tryptophan,Tryptophan,tryptophan,C11H12N2O2,[M+H]+,[M-H]-,153,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,205.097153624,205.077153624,205.117153624,140,170
 tyrosine_13C_15N,"L-Tyrosine (13C9, 99%; 15N, 99%)",tyrosine_13C_15N,191.1011,[M+H]+,[M-H]-,163,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,192.108376,192.088376,192.128376,151,181
 valine_13C_15N,"L-Valine (13C5, 99%; 15N, 99%)",valine_13C_15N,123.0928,[M+H]+,[M-H]-,164,2019_11_matrix_effect,serum,Mar Garcia-Aloy,2,1_good,1_good,124.100076,124.080076,124.120076,149,179
-5-Oxoproline,oxoproline,oxoproline,C5H7NO3,[M+H]+,[M-H]-,71,2020_01_matrix_effect,serum,Mar Garcia-Aloy,2,2_medium,1_good,130.049869084,130.048568585309,130.051169582691,51,91
-EIC_26,EIC_26,EIC_26,,[M]+,,129,CHRIS_preprocessing_pos,serum,Johannes Rainer,1,,1_good,313.155123,313.151991,313.158254,119,139
+unknown003,unknown003,unknown003,,[M]+,,140,CHRIS_preprocessing_pos,serum,Marilyn De Graeve,1,,1_good,702.49,702.4898,702.5039,130,150
 EIC_46,EIC_46,EIC_46,,[M]+,,120,CHRIS_preprocessing_pos,serum,Johannes Rainer,1,,2_ok,491.300337,491.295423,491.305249,110,130
-
