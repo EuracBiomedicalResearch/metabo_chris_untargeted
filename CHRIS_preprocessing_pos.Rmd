@@ -72,7 +72,8 @@ RDATA_PATH <- paste0("data/RData/", filename, "/", BATCHNR, "/")
 dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
 
 #' Path to the data
-DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS'     #FINDME!
+DATA_PATH <- '/data/massspec/sqlite'
+#DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS'     #FINDME!
 #DATA_PATH <- "data"
 
 ```
