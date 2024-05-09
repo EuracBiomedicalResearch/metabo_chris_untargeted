@@ -2,7 +2,7 @@
 
 ## To run that script through the queueing system use e.g.
 ##
-## sbatch --mem-per-cpu=64000 -w calc04 -c 10 ./CHRIS_preprocessing_pos.sh
+## sbatch --mem-per-cpu=64000 -p slow -c 10 ./CHRIS_preprocessing_pos.sh
 ##
 ## adapting the parameters -c (number of CPUs), --mem-per-cpu=64000, memory
 ## for each CPU (need to maybe use lower numbers). Paramter -p can be used
