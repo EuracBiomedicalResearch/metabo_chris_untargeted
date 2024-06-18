@@ -71,10 +71,10 @@ dir.create(IMAGE_PATH, recursive = TRUE)
 RDATA_PATH <- paste0("data/RData/", filename, "/", BATCHNR, "/")
 dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
 
-#' Path to the data
-DATA_PATH <- '/data/massspec/sqlite'
+#' Paths to the data
+DATA_SPATH <- '/data/massspec/sqlite'
 #DATA_PATH <- '/media/mdegraeve/josung/data/CHRIS'     #FINDME!
-#DATA_PATH <- "data"
+DATA_PATH <- "data"
 
 ```
 
@@ -131,7 +131,7 @@ series* samples);
 
 ```{r load_dataa}
 #' Load the spectra data from the database
-handle <- file.path(DATA_PATH, 'chris_hilic_pos_1.0.0.2.sqlite')
+handle <- file.path(DATA_SPATH, 'chris_hilic_pos_1.0.0.2.sqlite')
 s <- Spectra(handle, source = MsBackendOfflineSql(), drv = SQLite())
 
 #' create an MsExperiment
@@ -229,7 +229,7 @@ finding cwp parameter
 - peakwidth: observing previous EIC, expecting between 2 to 20s
 - ppm:
 
-```{r ppm_parameter decide with example 1}
+```{r ppm_parameter decide with example 1, eval = FALSE}
 ##' example 1
 #' cystine
 cystine_mz <- calculateMass("C6H12N2O4S2") |>
@@ -275,15 +275,15 @@ print('ppm range of cystine detected across samples:')
 format(round(range(mz_diff * 1e6 / mean(unlist(mz(cst)))), 3), 3)  #2.6 ppm for batch[45] == BATCH0088
 
 #' extract test ion for whole dataset
-eic_cystine <- chromatogram(chris,
-                            rt = c(200, 220),
-                            mz = cystine_mz + c(-0.01, 0.01),
-                            chunkSize = NR_CORES)
+#eic_cystine <- chromatogram(chris,
+#                            rt = c(200, 220),
+#                            mz = cystine_mz + c(-0.01, 0.01),
+#                            chunkSize = NR_CORES)
 
 ```
 
-The *m/z* ranges up `r format(round(max(range(mz_diff * 1e6 / mean(unlist(mz(cst))))),
-             3), 3)` ppm, which is good (ppm < 5).
+The *m/z* ranges up r format(round(max(range(mz_diff * 1e6 / mean(unlist(mz(cst))))),
+             3), 3) ppm, which is good (ppm < 5).
 
 But can also see shift to the right (symmetrical shift, skewness and kurtosis
 are OK) to the expected rt on the EIC (see plots generated in the
@@ -291,7 +291,7 @@ general_data_overview) for most of the standards. So, choose a large peak width
 (20s) to accommodate.
 
 
-```{r check ppm ok with example 2}
+```{r check ppm ok with example 2, eval = FALSE}
 ##' example 2
 #' histidine
 his_mz <- calculateMass("C6H9N3O2") |>
@@ -312,11 +312,11 @@ plot(eic_his,
      main = "EIC for histidine one sample")
 
 #' extract EIC
-eic_his <- chromatogram(chris[grep(unique(sampleData(chris)$batch_id)[1],
-                               sampleData(chris)$batch_id, fixed = TRUE)],
-                        rt = c(185, 195),
-                        mz = his_mz + c(-0.01, 0.01),
-                        chunkSize = NR_CORES)
+#eic_his <- chromatogram(chris[grep(unique(sampleData(chris)$batch_id)[1],
+#                               sampleData(chris)$batch_id, fixed = TRUE)],
+#                        rt = c(185, 195),
+#                        mz = his_mz + c(-0.01, 0.01),
+#                        chunkSize = NR_CORES)
 
 #' for testing below only (one batch):
 plot(eic_his,
@@ -343,10 +343,10 @@ print('ppm range of histidine detected across samples:')
 format(round(range(mz_diff * 1e6 / mean(unlist(mz(cst)))), 3), 3)   #4.8 ppm for batch[45] == BATCH0088
 
 #' extract EIC whole dataset
-eic_his <- chromatogram(chris,
-                        rt = c(185, 195),
-                        mz = his_mz + c(-0.01, 0.01),
-                        chunkSize = NR_CORES)
+#eic_his <- chromatogram(chris,
+#                        rt = c(185, 195),
+#                        mz = his_mz + c(-0.01, 0.01),
+#                        chunkSize = NR_CORES)
 
 ```
 
@@ -362,7 +362,7 @@ param <- CentWaveParam(peakwidth = c(2, 20), ppm = 40, snthresh = 2,  #put ppm h
 
 perform peak picking on the 2 examples: cystine and histidine.
 
-```{r include = TRUE}
+```{r include = TRUE, eval = FALSE}
 #' test for some compounds:
 #' cystine
 cystine_test <- findChromPeaks(eic_cystine, param = param, chunkSize = NR_CORES)
@@ -376,7 +376,7 @@ head(chromPeaks(his_test))
 
 show plots after peak picking for the 2 examples.
 
-```{r include = TRUE}
+```{r include = TRUE, eval = FALSE}
 #' Plot test chromatogram
 par(mfrow = c(1, 2))
 plot(cystine_test,
@@ -443,7 +443,7 @@ batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
 After peak detection on the whole dataset, the EICs of our 2 examples are
 evaluated agein.
 
-```{r, include = TRUE}
+```{r, include = TRUE, eval = FALSE}
 #' test for ions of interest
 eic_cystine <- chromatogram(chris,
                             rt = c(202, 217),
@@ -588,7 +588,7 @@ rownames(standards_chris_pos) <- standards_chris_pos$abbreviation
 
 create EIC plots for all standards in pool samples after peak detection.
 
-```{r all eics pool after peak detection, include = TRUE, eval = false}
+```{r all eics pool after peak detection, include = TRUE, eval = FALSE}
 #' All EICs in pool
 eics <- chromatogram(chris[pool_index],
                      mz = as.matrix(standards_chris_pos[, c("mzmin", "mzmax")]),
@@ -646,7 +646,7 @@ dataset is centroided. After manual inspection, an interesting region around
 file are discussed in section [Retention time alignment].
 
 
-```{r find good qual peak for rt align in rt 50-150s range}
+```{r find good qual peak for rt align in rt 50-150s range, eval = FALSE}
 #' keep only 2 samples
 mse <- chris[c(1L, 2L)]
 #mse
@@ -785,7 +785,7 @@ After refinement, the average peaks retieved per sample was
 
 create EIC plots for all standards in pool samples after refinement.
 
-```{r all eics pool after peak refinement, include = FALSE, eval = false}
+```{r all eics pool after peak refinement, include = FALSE, eval = FALSE}
 #' All EICs in pool
 eics <- chromatogram(chris[pool_index],
                      mz = as.matrix(standards_chris_pos[, c("mzmin", "mzmax")]),
@@ -1230,7 +1230,7 @@ legend("topright", col = col_batch, cex = 0.50,
 
 see 2 example EIC plots before vs. after rt alignment:
 
-```{r selected_eics_after_alignment}
+```{r selected_eics_after_alignment, eval = FALSE}
 #' standard after alignment
 par(mfrow = c(1, 2), mar = c(4, 4.5, 2, 0.5))
 plot(eic_cystine[1, pool_index], peakType = "none",
@@ -1355,7 +1355,9 @@ param <- PeakDensityParam(
     sampleGroups = sampleData(chris)$sample_type[pool_index],
     minFraction = 0.5, binSize = 0.01, ppm = 10, bw = 2) #FINDME!!! 0.8
 
+```
 
+```{r correspondence examples examples, eval = FALSE}
 plotChromPeakDensity(
     eic_cystine[1, pool_index],
     param = param,
@@ -1407,7 +1409,7 @@ chris_pool <- chris[pool_index, keepAdjustedRtime = TRUE, keepFeatures = TRUE]
 Extract chromatogram with signal for isomers 1-Methylhistidine and
 3-Methylhistidine. #FINDME!!! seperated or need see EIC?
 
-```{r check isomers ok}
+```{r check isomers ok, eval = FALSE}
 #' Extract chromatogram with signal for isomers 1-Methylhistidine and
 #' 3-Methylhistidine
 met_mz <- calculateMass("C7H11N3O2")
