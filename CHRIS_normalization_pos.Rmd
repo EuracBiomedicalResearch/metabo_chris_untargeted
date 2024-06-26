@@ -1,0 +1,1324 @@
+---
+title: "CHRIS_normalization_pos"
+author: "Marilyn De Graeve, Philippine Louail, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-06-24"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+bibliography: references.bib
+---
+
+**Modified**: `r file.info("CHRIS_preprocessing_pos.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+library("BiocStyle")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, dev = "png",
+               dpi = 300)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+
+```
+
+# Introduction
+
+During this workflow, the normalization of the untargeted metabolomics data of
+the Cooperative Health Research in South Tirol (CHRIS) study is performed. For a
+description of the study, methods used for the collection, handling and
+aqcuisition of the liquid chromatography-mass spectrometry (LC-MS) samples,
+please see [@verri_hernandes_age_2022]. Samples are acquired in both positive
+and negative ionization mode, for which the normalization of the positive (pos)
+mode will be performed in this Rmarkdown document.
+
+# Setup
+
+## Directories
+
+```{r directories, echo = FALSE}
+#' General settings
+filename <- "CHRIS_normalization_pos"
+
+#' Path to save images to; remove if exists.
+IMAGE_PATH <- paste0("images/", filename, "/")
+if (file.exists(IMAGE_PATH))
+    unlink(IMAGE_PATH, recursive = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE)
+
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to the data
+#SDATA_PATH <- '/home/mdegraeve/Documents/Files/Work_Eurac/Data/CHRIS' #FINDME!
+SDATA_PATH <- "data"
+#DATA_PATH <- "."
+DATA_PATH <- "data"
+
+```
+
+## Packages
+
+```{r packages, message=FALSE}
+library(MsExperiment)
+library(RSQLite)
+library(xcms)
+library(Spectra)
+library(RColorBrewer)
+library(pander)
+library(readxl)
+library(MetaboCoreUtils)
+library(MsBackendSql)
+#library(CompMetaboTools)
+library(SummarizedExperiment)
+library(ggfortify)
+
+library(ggplot2)
+```
+
+
+## Computation
+
+```{r parallel_processing_setup, message=FALSE}
+#' Set up parallel processing using multiple cores get the number of
+#' cpus allocated by queueing system or fall back to 7
+NR_CORES <- as.integer(Sys.getenv("SLURM_JOB_CPUS_PER_NODE", 8)) - 1L
+if (.Platform$OS.type == "unix") {
+    register(MulticoreParam(NR_CORES))
+} else {
+    register(bpstart(SnowParam(NR_CORES)))
+}
+
+```
+
+## functions
+```{r plot-functions}
+#' fast computational PCA score plotting functions
+#' https://ggplot2.tidyverse.org/reference/scale_shape.html
+shapes <- c(21, 24, 22, 23) #, 16, 17, 15, 18, 1, 2, 0, 5, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20) #25 available, pick coloreble ones
+shapes <- rep(shapes,100)
+
+theme_customgridbox<- function () {
+  theme(legend.position = "right",
+  legend.title = element_text(face="bold",size=18),
+  legend.text = element_text(size=18),
+  legend.key = element_rect(fill=NA),
+  axis.title = element_text(size=16),
+  axis.text = element_text(size=16,colour="black"),
+  axis.ticks = element_line(colour = "black"),
+  plot.title = element_text(face="bold",size=18,hjust=0.5),
+  panel.background = element_rect(fill=NA),
+  panel.grid.major = element_line(colour="grey80"),
+  panel.border = element_rect(fill=NA,size=1))
+}
+plot_pca <- function(scores, comp, col_palette) {
+  ggplot(data = scores, aes(x = PC1, y = PC2), label = rownames(scores)) +
+      geom_hline(yintercept = 0, colour = "gray65") +
+      geom_vline(xintercept = 0, colour = "gray65") +
+      geom_point(aes(fill=comp,shape=comp), color='black',size=1) +
+	  theme_customgridbox() +
+      ggtitle("PCA score plot") +
+      scale_shape_manual(values=shapes) +
+      scale_color_discrete(col_palette)
+}
+
+#' testing
+#colnames(pca_res$x)[1:2]
+#pca_res$x[1:5,1:5]
+#scores <- as.data.frame(pca_res$x)[,1:2]
+#comp <- res$injection_index
+#comp[1:10]
+#col_palette <- col_injection_index
+
+```
+
+# Normalization
+## Load data
+
+```{r load Rdata}
+#' Load preprocessing results
+load(file.path(SDATA_PATH, "SumExp_chris.RData")) #res is object
+#load(file.path(SDATA_PATH, "SumExp_chris_blank.RData"))
+#load(file.path(SDATA_PATH, "samples_chris.RData"))
+#load(file.path(SDATA_PATH, "blank_chris.RData"))
+
+## create a separate object for Pool_Dil and Pool_IS_dil because they affect PCA visualisaiton
+pool_dil_idx <- res$sample_type == "Pool_Dil"
+pool_dil <- res[, pool_dil_idx]
+res <- res[, !pool_dil_idx]
+pool_dil_is_idx <-res$sample_type == "Pool_IS_Dil"
+pool_dil_is <- res[, pool_dil_is_idx]
+res <- res[, !pool_dil_is_idx]
+
+#save(pool_dil, file = file.path(RDATA_PATH, "SumExp_chris_pool_dil.RData"))
+#save(pool_dil_is, file = file.path(RDATA_PATH, "SumExp_chris_pool_dil_is.RData"))
+
+## check all good, OK
+#res$sample_type
+#unique(res$batch_id)
+
+#' Define colors for the groups.
+#' Sample type
+col_phenotype <- brewer.pal(5, "Accent")[c(1, 5)]
+names(col_phenotype) <- c("Study", "Pool")
+
+col_sample <- col_phenotype[res$sample_type]
+
+#' Batches
+#' Define a unique color for each batch.
+col_batch_id <- rainbow(length(unique(res$batch_id)))
+names(col_batch_id) <- unique(res$batch_id)
+
+col_batches <- col_batch_id[res$batch_id]
+
+#' Injection index
+col_injection_index <- rainbow(length(unique(res$injection_index)))
+
+
+#' Impute missing values using uniform distribution
+na.unidis <- function(z) {
+    na <- is.na(z)
+    if (any(na)) {
+        min = min(z, na.rm = TRUE)
+        z[na] <- runif(sum(na), min = min/2, max = min)
+    }
+    z
+}
+
+#' Create an assay with the filled and imputed value.
+tmp <- apply(assay(res, "raw_filled"), MARGIN = 1, na.unidis)
+assays(res)$raw_filled_imputed <- t(tmp)
+
+#' not used, skip
+#smf <- do.call(.mztab_small_molecule_feature,
+#                             c(list(object = object,
+#                                    opt_columns = param@optionalFeatureColumns),
+#                                    param@dots))
+
+```
+
+## Unsupervised
+
+```{r PCA-before-norm, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+# With imputation
+vals <- assay(res, "raw_filled_imputed") |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+#load(file.path(RDATA_PATH, "pca_res_before.RData"))
+#save(pca_res, file = file.path(RDATA_PATH, "pca_res_before.RData")) 
+
+#' sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#vals_st <- cbind(vals, sample_type = res$sample_type)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', x = 3, y = 4, scale = 0) + #PC3 and 4
+#    scale_color_manual(values = col_phenotype)
+
+#' batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+#vals_bi <- cbind(vals, batch_id = res$batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', x = 3, y = 4, scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
+
+```
+- PC1 batch and something else
+- PC2 batches
+- PC3 orange batch ?
+- PC4 ??
+
+### Intensity evaluation
+
+Counts of non missing values and feature abundance distribution
+
+```{r counts-before-norm, fig.path = IMAGE_PATH, fig.height=7, fig.width=8, include=TRUE}
+layout(mat = matrix(1:3, ncol = 1), height = c(0.2, 0.2, 0.8))
+
+par(mar = c(0.2, 4.5, 0.2, 3))
+barplot(apply(assay(res, "raw"), MARGIN = 2, function(x) sum(!is.na(x))),
+        col = col_sample, ylab = "features raw data", xaxt = "n", space = 0.012,
+        border = NA)
+barplot(apply(assay(res, "raw_filled"), MARGIN = 2, function(x) sum(!is.na(x))),
+        col = col_sample, ylab = "features filled data", xaxt = "n",
+        space = 0.012, border = NA)
+boxplot(log2(assay(res, "raw_filled")), xaxt = "n",
+        ylab = expression(log[2]~abundance~filled~data),
+        col = col_sample, outline=FALSE, medlty = "blank", border = col_sample,
+        boxwex = 0.99 )
+points(colMedians(log2(assay(res, "raw_filled")), na.rm = TRUE), type = "l",
+       pch = 16)
+grid(nx = NA, ny = NULL)
+legend("topright", col = col_phenotype,
+       legend = names(col_phenotype), lty=1, lwd = 2, xpd = TRUE, ncol = 3,
+       cex = 0.8,  bty = "n")
+```
+
+## RLA
+
+Colored by samples type
+
+```{r rla-plot-before-norm raw and filled, fig.path = IMAGE_PATH, fig.width= 8, fig.cap = "RLA plot for the raw data and filled data. Note: outliers are not drawn."}
+par(mfrow = c(1, 1), mar = c(0.2, 4.5, 2.5, 3))
+boxplot(rowRla(assay(res, "raw_filled"), group = res$sample_type),
+        cex = 0.5, pch = 16,
+        col = col_sample, ylab = "RLA",
+        #border = paste0(col_sample, 40), notch = TRUE, boxwex = 1,
+        outline = FALSE, xaxt = "n", main = "Filled in data", cex.main = 1)
+grid(nx = NA, ny = NULL)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+legend("bottomright", col = col_phenotype,
+       legend = names(col_phenotype), lty=1, lwd = 2, xpd = TRUE, ncol = 3,
+       cex = 0.8,  bty = "n")
+```
+
+Colored by batches
+
+```{r rla-plot raw and filled-beforenorm, fig.path = IMAGE_PATH, fig.width = 8,  fig.cap = "RLA plot for the raw data and filled data. Note: outliers are not drawn."}
+par(mfrow = c(1, 1), mar = c(0.2, 4.5, 2.5, 3))
+boxplot(rowRla(assay(res, "raw_filled"), group = res$batch_id),
+        cex = 0.5, pch = 16,
+        col = col_batches, ylab = "RLA",
+        #border = paste0(col_batches, 40), notch = TRUE, boxwex = 1,
+        outline = FALSE, xaxt = "n", main = "Filled in data", cex.main = 1)
+grid(nx = NA, ny = NULL)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+legend("bottom", col = col_batch_id,
+       legend = names(col_batch_id), lty=1, lwd = 2, xpd = TRUE, ncol = 3,
+       cex = 0.8,  bty = "n")
+```
+
+This already give us an idea of the variation within batch
+
+## Internal standard
+
+```{r is-before-norm, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+#' get the list
+intern_standard <- read.delim("internal_standards.txt")
+intern_standard <- intern_standard[!is.na(intern_standard$POS), ]
+
+#'generate calcualte formula
+intern_standard$mz <- mapply(intern_standard$formula, intern_standard$POS,
+                             FUN = mass2mz)
+
+#' Fit for each standards
+intern_standard$mzmin <- intern_standard$mz - 0.005
+intern_standard$mzmax <- intern_standard$mz + 0.005
+intern_standard[,"rtmin"] <- intern_standard[, "RT"] - 10
+intern_standard[,"rtmax"] <- intern_standard[, "RT"] + 10
+
+intern_standard$feature_id <- NA_character_
+library(MetaboAnnotation)
+
+#' identify features matching m/z and RT of internal standards. With
+#' mzColname and rtColname we specify the column names in query and target
+#' that contain the m/z or RT values.
+fdef <- featureDefinitions(chris)
+fdef$feature_id <- rownames(fdef)
+match_intern_standard <- matchValues(
+    query = intern_standard,
+    target = fdef,
+    mzColname = c("mz", "mzmed"),
+    rtColname = c("RT", "rtmed"),
+    param = MzRtParam(ppm = 50, toleranceRt = 10))
+
+#' keep only matches with a 1:1 mapping standard to feature, i.e.
+#' remove matches for standards mapping to more than one feature
+rem_dups <- function(x) {
+    if (nrow(matches(x)) > 1)
+        filterMatches(x, index = integer())
+    else x
+}
+match_intern_standard <- endoapply(match_intern_standard, FUN = rem_dups)
+intern_standard$feature_id <- match_intern_standard$target_feature_id
+
+intern_standard <- intern_standard[!is.na(intern_standard$feature_id), ]
+
+##CANNOT RUN LOCALLY
+#is_features <- featureChromatograms(
+    #chris, features = intern_standard$feature_id, expandRt = 5)
+
+#dr <- file.path(IMAGE_PATH, "internal_standard", "features", "IS_feature_for")
+#dir.create(dr, recursive = TRUE, showWarnings = FALSE)
+#for (i in seq_len(nrow(intern_standard))) {
+#    png(paste0(dr, "/", intern_standard[i, "abbreviation"], ".png"),
+ #       width = 16, height = 8, units = "cm", res = 200, pointsize = 4)
+  #  eic <- is_features[i, ]
+   # plot(eic, col = col_sample,
+    #     peakBg = paste0(col_sample[chromPeaks(eic)[, "sample"]], 40))
+    #abline(v = intern_standard$RT[i], lty = 2)
+    #dev.off()
+#}
+##
+
+#' prepare PCA; maybe remove later?
+vals <- assay(res, "raw_filled")[intern_standard$feature_id, ] |>
+    na.omit() |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+save(pca_res, file = file.path(RDATA_PATH, "pca_res_is-before-norm.RData"))  #FINDME
+
+#' by sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#par(mfrow = c(1, 2), mar = c(4.5, 4.5, 4.5, 1))
+#plot_pca(pca_res, pc_x = 1, pc_y = 2, pch = 21,
+#         col = col_sample, bg = paste0(col_sample, 80))
+#legend("topleft", inset = c(-0.2, -0.29), col = col_phenotype,
+#       legend = names(col_phenotype), lty=1, lwd = 2, xpd = TRUE, ncol = 3,
+#       cex = 0.7, title = "Phenotype IS", title.cex = 0.8)
+#plot_pca(pca_res, pc_x = 3, pc_y = 4, pch = 21,
+#         col = col_sample, bg = paste0(col_sample, 80))
+
+#' by batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+par(mfrow = c(1, 2), mar = c(4.5, 4.5, 4.5, 1))
+plot_pca(pca_res, pc_x = 1, pc_y = 2, pch = 21,
+         col = col_batches, bg = paste0(col_batches, 80))
+legend("topleft", inset = c(-0.25, -0.28), col = col_batch_id,
+       legend = names(col_batch_id), lty=1, lwd = 2, xpd = TRUE, ncol = 3,
+       cex = 0.7, title = "Batches IS", title.cex = 0.8)
+plot_pca(pca_res, pc_x = 3, pc_y = 4, pch = 21,
+         col = col_batches, bg = paste0(col_batches, 80))
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index')
+
+```
+
+IS mix really well
+
+
+# Between sample - median scaling
+
+```{r median-scaling}
+#' Compute median and generate normalization factor
+mdns <- apply(assay(res, "raw_filled"), MARGIN = 2,
+              median, na.rm = TRUE )
+nf_mdn <- mdns / median(mdns)
+
+#' divide dataset by median of median and create a new assay.
+assays(res)$norm <- sweep(assay(res, "raw_filled"), MARGIN = 2, nf_mdn, '/')
+assays(res)$norm_imputed <- sweep(assay(res, "raw_filled_imputed"), MARGIN = 2,
+                                  nf_mdn, '/')
+```
+
+## Evaluation
+
+### coef of variation of QC samples
+
+```{r CV-after_MS, include=TRUE, results = "asis"}
+index_QC <- res$sample_type == "Pool"
+
+QC <- cbind(
+    CV_Raw = rowRsd(assay(res, "raw_filled")[, index_QC], na.rm = TRUE),
+    CV_Median_scaled = rowRsd(assay(res, "norm")[, index_QC], na.rm = TRUE)
+    )
+
+#' Quantile
+QC_df <- data.frame(raw = quantile(QC[, "CV_Raw"], na.rm = TRUE),
+                    MRM = quantile(QC[, "CV_Median_scaled"], na.rm = TRUE)
+                    )
+cpt <- paste0("Distribution of CV values across QC samples for the raw ",
+              "and between-sample normalized data.")
+pandoc.table(QC_df, style = "rmarkdown", caption = cpt)
+```
+
+### Coef of variation of IS
+
+```{r CV-is-after_MS, include=TRUE, results = "asis"}
+intern_standard$CV_Raw <- rowRsd(
+    assay(res, "raw_filled")[intern_standard$feature_id, ], na.rm = TRUE)
+intern_standard$CV_Median_scaled <- rowRsd(
+    assay(res, "norm")[intern_standard$feature_id, ], na.rm = TRUE)
+
+cpt <- paste("Internal standards with detected and assigned features coefficient
+             of variation before and after different method of normalization.")
+pandoc.table(intern_standard[, c("abbreviation", "CV_Raw", "CV_Median_scaled")],
+             style = "rmarkdown", caption = cpt)
+```
+
+#### RLA
+
+```{r rla-plots evaluate norm method, include=TRUE, fig.path = IMAGE_PATH, fig.cap = "RLA plot for the raw data and different sample normalization method. Note: outliers are not drawn.", fig.width = 8, fig.height = 7}
+par(mfrow = c(2, 1), mar = c(0.2, 2, 3, 3))
+
+boxplot(rowRla(assay(res, "raw_filled"), group = res$sample_type),
+        cex = 0.5, pch = 16, col = col_sample, ylab = "RLA",
+        #border = paste0(col_sample, 40), notch = TRUE, cex.main = 1,
+        outline = FALSE, xaxt = "n", main = "Raw data", boxwex = 1)
+grid(nx = NA, ny = NULL)
+legend("topright", inset = c(0, -0.18), col = col_phenotype,
+       legend = names(col_phenotype), lty=1, lwd = 2, xpd = TRUE, ncol = 2,
+       cex = 0.7)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+
+boxplot(rowRla(assay(res, "norm"), group = res$sample_type),
+        cex = 0.5, pch = 16,
+        col = col_sample, ylab = "RLA",
+        #border = paste0(col_sample, 40), notch = TRUE, boxwex = 1,
+        outline = FALSE, xaxt = "n", main = "Median scaled", cex.main = 1)
+grid(nx = NA, ny = NULL)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+```
+
+#### Boxplot of abundances
+
+```{r boxplots evaluate norm method, include=TRUE, fig.path = IMAGE_PATH, fig.cap = "Boxplots of signal distributions for the raw data and different sample normalization method. Note: outliers are not drawn.", fig.width = 8, fig.height = 7}
+par(mfrow = c(2, 1), mar = c(0.5, 4.5, 3, 3))
+
+boxplot(log2(assay(res, "raw_filled")),
+        cex = 0.5, col = col_sample, ylab = expression(log[2]~abundance),
+        #border = paste0(col_sample, 40), notch = TRUE, cex.main = 1,
+        outline = FALSE, xaxt = "n", main = "Raw data", boxwex = 1)
+grid(nx = NA, ny = NULL)
+legend("topleft", inset = c(0, -0.18), col = col_phenotype,
+       legend = names(col_phenotype), lty=1, lwd = 2, xpd = TRUE, ncol = 2,
+       cex = 0.7)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+
+boxplot(log2(assay(res, "norm")),
+        cex = 0.5, col = col_sample, ylab = expression(log[2]~abundance),
+        #border = paste0(col_sample, 40), notch = TRUE, boxwex = 1,
+        outline = FALSE, xaxt = "n", main = "Median scaled", cex.main = 1)
+grid(nx = NA, ny = NULL)
+abline(h = 0, lty=3, lwd = 1, col = "black")
+```
+
+## PCA
+
+```{r pca-after-MS, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+# With imputation
+vals <- assay(res, "norm_imputed") |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+save(pca_res, file = file.path(RDATA_PATH, "pca_after_MS.RData"))  #FINDME
+
+#' sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#vals_st <- cbind(vals, sample_type = res$sample_type)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', x = 3, y = 4, scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+
+#' batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+#vals_bi <- cbind(vals, batch_id = res$batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', x = 3, y = 4, scale = 0)+
+#    scale_color_manual(values = col_batch_id)
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
+
+```
+
+```{r eval = !file.exists(paste0(RDATA_PATH, "SumExp_chris_norm_MS.RData"))}
+save(res, file = file.path(RDATA_PATH, "SumExp_chris_norm_MS.RData"))
+```
+
+# within batches
+
+```{r eval = file.exists(paste0(RDATA_PATH, "SumExp_chris_norm_MS.RData"))}
+load(file.path(RDATA_PATH, "SumExp_chris_norm_MS.RData"))
+```
+
+## evaluate correlation to injection index
+
+```{r correlation-inj-idx-before, fig.path = IMAGE_PATH, fig.height=4, fig.width=9}
+#' Define a function to calculate the correlation per batches
+#test for one batch
+pool_index <- res$sample_type == "Pool"
+res_qc <- res[, pool_index]
+batch_id <- unique(res_qc$batch_id)
+
+cor_fun <- function(row) {
+    if (sum(!is.na(row)) >= 6)
+        cor(row, tmp$injection_index, method = "spearman",
+            use = "pairwise.complete.obs")
+    else NA_real_
+}
+
+dr <- file.path(DATA_PATH, "normalisation/within_batch/")
+
+for (i in batch_id) {
+    tmp <- res_qc[, res_qc$batch_id == i]
+    cor_res <- apply(assay(tmp, "norm"), MARGIN = 1, FUN = cor_fun)
+    par(mfrow = c(1,2), mar = c(2, 2, 2, 2))
+    plot(sort(cor_res), col = col_batch_id[i], main = paste0("QC samples ", i), ylab = "rho",
+     xlab = "rank")
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40", border = NA)
+    hist(cor_res)
+}
+
+```
+
+Need to correct !
+
+## fit linear model
+
+fit feature-wise linear model (y ~ inj_idx) to the (log2 transformed) abundance
+data of the QC samples within each batch and compare the slopes for each feature
+between the batches.
+
+Here i build a loop to fit and adjust linear model to each feature to determine the relationship between the injection index and abundance within each batch.
+Some info because the code is probably confusing:
+
+- the linear model is fitted only for features that are present in at least 8
+out of 10 of the QC samples.
+
+- out of these features only the ones where the fit has a p value of less than 0.05 will be adjusted.
+
+- this loop also produces some interesting plots for each batch:
+    - a plot and histogram showing the distribution of the correlation of each
+    features with the injection index
+    - distribution of p-value vs the coefficient of the linear model (slope)
+    - plots of the highest significant and highest non- significant slope
+    - a final figure that shows the before and after of the correlation of each
+    features with injection index before and after the adjusted to the linear
+    model. and this is plotted for both QC samples and study samples.
+
+```{r loop-inj-idx-correction}
+#' test new functions
+#BiocManager::install("rformassspectrometry/MetaboCoreUtils", ref = "jomain")
+
+#' subsetting for loop
+pool_index <- res$sample_type == "Pool"
+study_index <- res$sample_type == "Study"
+res_qc <- res[, pool_index]
+res_study <- res[, study_index]
+
+batch_id <- unique(res_qc$batch_id)
+
+#' functions in loop
+cor_fun <- function(row, i_d) {
+    if (sum(!is.na(row)) >= 3*(length(row))/4) ## 3/4 detection rate
+        cor(row, i_d, method = "spearman",
+            use = "pairwise.complete.obs")
+    else NA_real_
+}
+
+#' duplicate norm object to replace with new values in loop
+
+assay(res, "norm_wb") <- assay(res, "norm")
+
+#' big loop
+for (i in batch_id) {
+    ## extract for one batch
+    tmp_qc <- res_qc[, res_qc$batch_id == i]
+    tmp_sample <- res_study[, res_study$batch_id == i]
+    tmp_full <- res[, res$batch_id == i]
+
+    dr_b <- paste0(dr, i, "/")
+    dir.create(dr_b, recursive = TRUE, showWarnings = FALSE)
+
+    ## evaluate the need for adjustment by checking correlation of abundance
+    ## with injection index
+    cor_before <- apply(assay(tmp_qc, "norm"), MARGIN = 1,
+                        FUN = cor_fun, i_d = tmp_qc$injection_index)
+    ## plot
+    png(paste0(dr_b, "cor_before.png"), width = 12, height = 8, units = "cm",
+        res = 600, pointsize = 4)
+    par(mfrow = c(1,2), mar = c(2, 2, 2, 2))
+    plot(sort(cor_before), col = col_batch_id[i], main = paste0("QC samples ", i),
+         ylab = "rho", xlab = "rank")
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40",
+         border = NA)
+    hist(cor_res)
+    dev.off()
+
+    ## fit linear model on QC samples
+    qc_lm <- fit_lm(y ~ injection_index,
+                data = data.frame(injection_index = tmp_qc$injection_index),
+                y = log2(assay(tmp_qc, "norm")),
+                minVals = 8) ## 80% detection rate (10 QC samples per batches)
+
+    ## get summary
+    qc_lm_summary <- lapply(qc_lm, function(z) {
+        if (length(z) > 1) {
+        s <- summary(z)
+        c(slope = coefficients(s)[2, "Estimate"],
+          p.value = coefficients(s)[2, 4],
+          adj.r.squared = s$adj.r.squared)
+        } else c(slope = NA_real_, F = NA_real_,
+             adj.r.squared = NA_real_)
+        }) |> do.call(what = rbind)
+    head(qc_lm_summary)
+
+    ## plot p value vs coeff
+    png(paste0(dr_b, "volcano.png"), width = 12, height = 8, units = "cm",
+        res = 600, pointsize = 4)
+    plot(qc_lm_summary[, "slope"], -log10(qc_lm_summary[, "p.value"]),
+     xlab = "injection order dependency", ylab = expression(-log[10](p~value)),
+     pch = 21, col = "#00000080", bg = "#00000040")
+    grid()
+    abline(h = -log10(0.05))
+    dev.off()
+
+    ## plot highest non-significant slope
+    png(paste0(dr_b, "high_slope_non_significant.png"), width = 12, height = 8, units = "cm",
+        res = 600, pointsize = 4)
+    sign <- qc_lm_summary[qc_lm_summary[, "p.value"] > 0.05, ]
+    idx <- which.max(sign[, "slope"])
+    plot(x = tmp_full$injection_index, y = log2(assay(tmp_full, "norm")[idx, ]),
+         xlab = "injection_index", ylab = expression(log[2]~abundance))
+    points(x = tmp_qc$injection_index,
+           y = log2(assay(tmp_qc, "norm")[idx, ]), pch = 16, col = "red")
+    grid()
+    abline(qc_lm[[idx]])
+    dev.off()
+
+    ## plot highest significant slope
+    png(paste0(dr_b, "high_slope_significant.png"), width = 12, height = 8, units = "cm",
+        res = 600, pointsize = 4)
+    sign <- qc_lm_summary[qc_lm_summary[, "p.value"] < 0.05, ]
+    idx <- which.max(sign[, "slope"])
+    plot(x = tmp_full$injection_index, y = log2(assay(tmp_full, "norm")[idx, ]),
+         xlab = "injection_index", ylab = expression(log[2]~abundance))
+    points(x = tmp_qc$injection_index,
+           y = log2(assay(tmp_qc, "norm")[idx, ]), pch = 16, col = "red")
+    grid()
+    abline(qc_lm[[idx]])
+    dev.off()
+
+    ## number that would not be adjusted
+    print(paste0(length(qc_lm[qc_lm_summary[, "p.value"] < 0.05]),
+                 " features are going to be adjusted for ", i))
+    qc_lm[qc_lm_summary[, "p.value"] > 0.05] <- NA
+
+    ## adjust
+    vals_adj <- adjust_lm(log2(assay(tmp_full, "norm")), data = data.frame(injection_index = tmp_full$injection_index), lm = qc_lm)
+    vals_adj <- 2^vals_adj
+    vals_adj <- as.data.frame(vals_adj)
+
+    ## Compare correlation before and after: qc samples
+    val_qc <- vals_adj[, tmp_full$sample_type == "Pool"]
+    cor_after_qc <- apply(val_qc, MARGIN = 1, FUN = cor_fun, i_d = tmp_qc$injection_index)
+
+    ## Compare correlation before and after: study samples
+    cor_before_study<- apply(assay(tmp_sample, "norm"), MARGIN = 1, FUN = cor_fun, i_d = tmp_sample$injection_index)
+    val_study <- vals_adj[, tmp_full$sample_type == "Study"]
+    cor_after_study<- apply(val_study, MARGIN = 1, FUN = cor_fun, i_d = tmp_sample$injection_index)
+
+    ## plot all together
+    png(paste0(dr_b, "cor_after.png"), width = 15, height = 8, units = "cm",
+        res = 600, pointsize = 4)
+    par(mfrow = c(1, 2))
+    plot(sort(cor_before), col = "black",
+         main = paste0("QC samples ", i, " before (black) and after (color) norm"),
+         ylab = "rho", xlab = "rank")
+    points(sort(cor_after_qc), col = col_batch_id[i])
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40",
+         border = NA)
+    plot(sort(cor_before_study), col = "black",
+         main = paste0("Study samples ", i, " before (black) and after (red) norm"),
+         ylab = "rho", xlab = "rank")
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40",
+         border = NA)
+    points(sort(cor_after_study), col = col_batch_id[i])
+    dev.off()
+
+    ##replace in res object
+    assay(res, "norm_wb")[row.names(vals_adj), colnames(vals_adj)] <- as.matrix(vals_adj)
+    }
+
+#' impute assay
+tmp <- assay(res, "norm_wb")
+tmp <- apply(tmp, MARGIN = 1, na.unidis)
+assays(res)$norm_wb_imputed <- t(tmp)
+```
+
+## PCA
+
+```{r pca-after-wb, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+# With imputation
+vals <- assay(res, "norm_wb_imputed") |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+save(pca_res, file = file.path(RDATA_PATH, "pca_after-wb.RData"))  #FINDME
+
+#' sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#vals_st <- cbind(vals, sample_type = res$sample_type)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', x = 3, y = 4,
+#         scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+
+
+#' batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+#vals_bi <- cbind(vals, batch_id = res$batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', x = 3, y = 4, scale = 0)+
+#    scale_color_manual(values = col_batch_id)
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4,
+#         scale = 0)
+
+```
+
+PCA look the same as before but i check the assay has different values. So I
+don't think it is an error in the code and more that this was of adjusting for
+injection index does not affect results distribution that much...
+
+# Between batches
+
+Eliminate batch-specific effects by considering abundance differences in QC
+samples across various batches. Ensure that for each feature, the QC values are
+consistent and normalize accordingly. This approach is beneficial for datasets
+measured over extended periods or diverse locations.
+
+## evaluate relationship between batches
+
+```{r fstat-before, fig.path = IMAGE_PATH, fig.height=6, fig.width=8}
+#' Define a function to calculate the correlation per batches
+#test for one batch
+pool_index <- res$sample_type == "Pool"
+res_qc <- res[, pool_index]
+
+aov_fun <- function(row, i_d) {
+    if (sum(!is.na(row)) >= 55){
+        tmp <- data.frame(y = row, batch_id = i_d)
+        aov(y ~ batch_id, data = tmp)
+    }
+}
+aov_before_qc <- apply(log2(assay(res_qc, "norm_wb")), MARGIN = 1, FUN = aov_fun,
+                       i_d = res_qc$batch_id, simplify = FALSE)
+
+# get f value for each feature, super annoying the result format is weird
+vec_P_before_qc <- vector(length = length(aov_before_qc))
+vec_F_before_qc <- vector(length = length(aov_before_qc))
+
+
+for (i in seq_len(length(aov_before_qc))) {
+    if(!is.null(aov_before_qc[[i]])) {
+        df <- summary(aov_before_qc[[i]])[[1]]
+        vec_F_before_qc[i] <- df["batch_id", "F value"]
+        vec_P_before_qc[i] <- df["batch_id", "Pr(>F)"]
+    }
+
+}
+
+par(mfrow = c(1,2), mar = c(2, 2, 2, 2))
+plot(sort(vec_F_before_qc), col= "black", main = "QC sample betweeen batch anova F value")
+abline(h = 1)
+hist(vec_P_before_qc, breaks = 50)
+
+sum(vec_P_before_qc < 0.05)
+sum(vec_F_before_qc >1)
+```
+
+almost all of the features show significance
+The conclusion is that we need ot adjust everything and hopefully it fixes the
+F-statistics a bit
+
+## fit lm and adjust
+
+```{r lm-bb, fig.path = IMAGE_PATH}
+## fit linear model on QC samples
+qc_lm <- fit_lm(y ~ batch_id,
+            data = data.frame(batch_id = res_qc$batch_id),
+            y = log2(assay(res_qc, "norm_wb")),
+            minVals = 50) ## 80% detection rate
+
+# Need to remove features that have less than 5 non-missing values in one batch
+res_qc <- res[, pool_index]
+batch_id <- unique(res_qc$batch_id)
+vec_remove <- integer(0)
+
+for (i in batch_id) {
+    tmp_qc <- res_qc[,res_qc$batch_id == i]
+    tmp_flag <- apply(assay(tmp_qc, "norm_wb"), MARGIN = 1, function(row){sum(!is.na(row)) < 5})
+    tmp_flag <- which(tmp_flag)
+    vec_remove <- c(vec_remove, tmp_flag)
+}
+
+# get unique features
+vec_remove <- unique(vec_remove)
+
+# replace by NA
+qc_lm[vec_remove] <- NA
+
+## get summary
+qc_lm_summary <- lapply(qc_lm, function(z) {
+    if (length(z) > 1) {
+    s <- summary(z)
+    c(slope = coefficients(s)[2, "Estimate"],
+      p.value = coefficients(s)[2, 4],
+      adj.r.squared = s$adj.r.squared)
+    } else c(slope = NA_real_, F = NA_real_,
+         adj.r.squared = NA_real_)
+    }) |> do.call(what = rbind)
+head(qc_lm_summary)
+
+## plot p value vs coeff
+plot(qc_lm_summary[, "slope"], -log10(qc_lm_summary[, "p.value"]),
+ xlab = "batch mid order dependency", ylab = expression(-log[10](p~value)),
+ pch = 21, col = "#00000080", bg = "#00000040")
+grid()
+abline(h = -log10(0.05))
+
+## plot highest non-significant slope
+sign <- qc_lm_summary[qc_lm_summary[, "p.value"] > 0.05, ]
+idx <- which.max(sign[, "slope"])
+plot(x = factor(res$batch_id), y = log2(assay(res, "norm_wb")[idx, ]),
+     xlab = "batch_id", ylab = expression(log[2]~abundance))
+points(x = factor(res_qc$batch_id),
+       y = log2(assay(res_qc, "norm_wb")[idx, ]), pch = 16, col = "red")
+grid()
+
+## plot highest significant slope
+sign <- qc_lm_summary[qc_lm_summary[, "p.value"] < 0.05, ]
+idx <- which.max(sign[, "slope"])
+plot(x = factor(res$batch_id), y = log2(assay(res, "norm_wb")[idx, ]),
+     xlab = "batch_id", ylab = expression(log[2]~abundance))
+points(x = factor(res_qc$batch_id),
+       y = log2(assay(res_qc, "norm_wb")[idx, ]), pch = 16, col = "red")
+grid()
+
+## adjust
+vals_adj <- adjust_lm(log2(assay(res, "norm_wb")), data = data.frame(batch_id = res$batch_id), lm = qc_lm)
+vals_adj <- 2^vals_adj
+
+##create new assay
+assay(res, "norm_bb") <- vals_adj
+```
+
+## Evaluate results
+
+### F stat and p value
+
+```{r fstat-after-bb, fig.path = IMAGE_PATH}
+res_qc <- res[, pool_index]
+#' QC prep
+aov_after_qc <- apply(log2(assay(res_qc, "norm_bb")), MARGIN = 1,
+                      FUN = aov_fun, i_d = res_qc$batch_id , simplify = FALSE)
+
+# get f value for each feature, super annoying the result format is weird
+vec_P_after_qc <- vector(length = length(aov_after_qc))
+vec_F_after_qc <- vector(length = length(aov_after_qc))
+
+
+for (i in seq_len(length(aov_after_qc))) {
+    if(!is.null(aov_after_qc[[i]])) {
+        df <- summary(aov_after_qc[[i]])[[1]]
+        vec_F_after_qc[i] <- df["batch_id", "F value"]
+        vec_P_after_qc[i] <- df["batch_id", "Pr(>F)"]
+    }
+}
+
+sum(vec_P_after_qc < 0.05)
+sum(vec_F_after_qc >1)
+
+#' study prep
+study_idx <- res$sample_type == "Study"
+res_study <- res[, study_idx]
+
+aov_before_study <- apply(log2(assay(res_study, "norm_wb")), MARGIN = 1,
+                          FUN = aov_fun, i_d = res_study$batch_id , simplify = FALSE)
+
+aov_after_study <- apply(log2(assay(res_study, "norm_bb")), MARGIN = 1,
+                      FUN = aov_fun, i_d = res_study$batch_id , simplify = FALSE)
+
+# get f value for each feature, super annoying the result format is weird
+vec_P_before_s <- vector(length = length(aov_before_study))
+vec_F_before_s <- vector(length = length(aov_before_study))
+for (i in seq_len(length(aov_before_study))) {
+    if(!is.null(aov_before_study[[i]])) {
+        df <- summary(aov_before_study[[i]])[[1]]
+        vec_F_before_s[i] <- df["batch_id", "F value"]
+        vec_P_before_s[i] <- df["batch_id", "Pr(>F)"]
+    }
+}
+
+vec_P_after_s <- vector(length = length(aov_after_study))
+vec_F_after_s <- vector(length = length(aov_after_study))
+for (i in seq_len(length(aov_after_study))) {
+    if(!is.null(aov_after_study[[i]])) {
+        df <- summary(aov_after_study[[i]])[[1]]
+        vec_F_after_s[i] <- df["batch_id", "F value"]
+        vec_P_after_s[i] <- df["batch_id", "Pr(>F)"]
+    }
+}
+
+## plot all together
+plot(sort(vec_F_before_qc), col= "black",
+     main = "QC samples between batch F value before (black) and after (red) norm",
+     xlab = "rank")
+points(sort(vec_F_after_qc), col = "red")
+
+plot(sort(vec_F_before_s), col= "black",
+     main = "Study samples between batch F value before (black) and after (red) norm",
+     xlab = "rank")
+points(sort(vec_F_after_s), col = "red")
+```
+
+
+### PCA before and after norm
+
+```{r, fig.path = IMAGE_PATH}
+#' impute assay (cannot take log because introduce negative value and breaks function)
+tmp <- assay(res, "norm_bb")
+tmp <- apply(tmp, MARGIN = 1, na.unidis)
+assays(res)$norm_bb_imputed <- t(tmp)
+```
+
+
+```{r pca-after-bb, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+# With imputation
+vals <- assay(res, "norm_bb_imputed") |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+save(pca_res, file = file.path(RDATA_PATH, "pca_after-bb.RData"))  #FINDME
+
+#' sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#vals_st <- cbind(vals, sample_type = res$sample_type)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', x = 3, y = 4, scale = 0) + #PC3 and 4
+#    scale_color_manual(values = col_phenotype)
+
+#' batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+#vals_bi <- cbind(vals, batch_id = res$batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', x = 3, y = 4, scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
+
+```
+
+# Implement one linear model for injection index and batches
+
+Now will try to implement a full linear model that include both injection_index and batch
+
+```{r combined-linear-model, fig.path = IMAGE_PATH}
+res_qc <- res[, pool_index]
+
+## fit linear model on QC samples
+qc_lm <- fit_lm(y ~ injection_index * batch_id,
+            data = data.frame(batch_id = res$batch_id, injection_index = res$injection_index),
+            y = log2(assay(res, "norm")),
+            minVals = 50) ## 80% detection rate
+
+# Need to remove features that have less than 5 non-missing values in one batch
+# took previous vector (bc same stuff)
+# replace by NA
+qc_lm[vec_remove] <- NA
+
+## get summary
+qc_lm_summary <- lapply(qc_lm, function(z) {
+    if (length(z) > 1) {
+    s <- summary(z)
+    c(slope = coefficients(s)[2, "Estimate"],
+      p.value = coefficients(s)[2, 4],
+      adj.r.squared = s$adj.r.squared)
+    } else c(slope = NA_real_, F = NA_real_,
+         adj.r.squared = NA_real_)
+    }) |> do.call(what = rbind)
+head(qc_lm_summary)
+
+## plot p value vs coeff
+plot(qc_lm_summary[, "slope"], -log10(qc_lm_summary[, "p.value"]),
+ xlab = "batch mid order dependency", ylab = expression(-log[10](p~value)),
+ pch = 21, col = "#00000080", bg = "#00000040")
+grid()
+abline(h = -log10(0.05))
+
+## adjust
+vals_adj <- adjust_lm(log2(assay(res, "norm")), data = data.frame(batch_id = res$batch_id, injection_index = res$injection_index), lm = qc_lm)
+vals_adj <- 2^vals_adj
+
+##create new assay
+assay(res, "norm_lm2") <- vals_adj
+```
+
+### PCA
+
+```{r}
+#' impute assay (cannot take log because introduce negative value and breaks function)
+tmp <- assay(res, "norm_lm2")
+tmp <- apply(tmp, MARGIN = 1, na.unidis)
+assays(res)$norm_lm2_imputed <- t(tmp)
+```
+
+
+```{r pca-after-combined-linear-model, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+# With imputation
+vals <- assay(res, "norm_lm2_imputed") |>
+    log2() |>
+    t() |>
+    scale(center = TRUE, scale = TRUE)
+
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+
+save(pca_res, file = file.path(RDATA_PATH, "pca_after-comb-lm.RData"))  #FINDME
+
+#' sample type
+p <- plot_pca(as.data.frame(pca_res$x), res$sample_type, col_phenotype)
+plot(p)
+#vals_st <- cbind(vals, sample_type = res$sample_type)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', scale = 0) +
+#    scale_color_manual(values = col_phenotype)
+#autoplot(pca_res, data = vals_st, colour = 'sample_type', x = 3, y = 4, scale = 0) + #PC3 and 4
+#    scale_color_manual(values = col_phenotype)
+
+#' batches
+p <- plot_pca(as.data.frame(pca_res$x), res$batch_id, col_batch_id)
+plot(p)
+#vals_bi <- cbind(vals, batch_id = res$batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+#autoplot(pca_res, data = vals_bi, colour = 'batch_id', x = 3, y = 4, scale = 0) +
+#    scale_color_manual(values = col_batch_id)
+
+#' injection index
+p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
+#autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
+
+```
+
+# Compare the 2 norm strategies
+
+Correlation with injection order
+
+```{r comparison-2-norm-strategies}
+#' Define a function to calculate the correlation per batches
+#test for one batch
+pool_index <- res$sample_type == "Pool"
+res_qc <- res[, pool_index]
+
+study_index <- res$sample_type == "Study"
+res_s <- res[, study_index]
+
+batch_id <- unique(res_qc$batch_id)
+
+cor_fun <- function(row, i_d) {
+    if (sum(!is.na(row)) >= 3*(length(row))/4) ## 3/4 detection rate
+        cor(row, i_d, method = "spearman",
+            use = "pairwise.complete.obs")
+    else NA_real_}
+
+dr <- file.path(DATA_PATH, "normalisation/combined_model/")
+
+for (i in batch_id) {
+    tmp <- res_qc[, res_qc$batch_id == i]
+    tmp_s <- res_s[, res_s$batch_id == i]
+
+    dr_b <- paste0(dr, i, "/")
+    dir.create(dr_b, recursive = TRUE, showWarnings = FALSE)
+
+    # before
+    cor_res_before <- apply(assay(tmp, "norm"), MARGIN = 1, FUN = cor_fun, i_d = tmp$injection_index)
+    cor_res_before_s <- apply(assay(tmp_s, "norm"), MARGIN = 1, FUN = cor_fun, i_d = tmp_s$injection_index)
+
+    #lm 2 step
+    cor_res_bb <- apply(assay(tmp, "norm_bb"), MARGIN = 1, FUN = cor_fun, i_d = tmp$injection_index)
+    cor_res_bb_s <- apply(assay(tmp_s, "norm_bb"), MARGIN = 1, FUN = cor_fun, i_d = tmp_s$injection_index)
+
+    #lm 1 step: combined model
+    cor_res_2 <- apply(assay(tmp, "norm_lm2"), MARGIN = 1, FUN = cor_fun, i_d = tmp$injection_index)
+    cor_res_2_s <- apply(assay(tmp_s, "norm_lm2"), MARGIN = 1, FUN = cor_fun, i_d = tmp_s$injection_index)
+
+    png(paste0(dr_b, "cor_norm_2strategy.png"), width = 15, height = 8, units = "cm",
+    res = 600, pointsize = 4)
+    par(mfrow = c(1,2), mar = c(2, 2, 2, 2))
+    plot(sort(cor_res_before), col = "black", main = paste0("QC samples ", i, "strategies norm"), ylab = "rho",
+     xlab = "rank")
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40", border = NA)
+    points(sort(cor_res_bb), col = "red")
+    points(sort(cor_res_2), col = "blue")
+
+    plot(sort(cor_res_before_s), col = "black",
+         main = paste0("Study samples ", i, "strategies norm"), ylab = "rho",
+         xlab = "rank")
+    rect(par("usr")[1], -0.2, par("usr")[2], 0.2, col = "#FFCCCC40", border = NA)
+    points(sort(cor_res_bb_s), col = "red")
+    points(sort(cor_res_2_s), col = "blue")
+    legend(x = "topleft", legend = c("before", "2-steps", "combined model"), col = c("black", "red","blue"))
+    dev.off()
+}
+
+
+#' QC prep
+aov_lm2 <- apply(log2(assay(res_qc, "norm_lm2")), MARGIN = 1,
+                      FUN = aov_fun, i_d = res_qc$batch_id , simplify = FALSE)
+
+# get f value for each feature, super annoying the result format is weird
+vec_P <- vector(length = length(aov_lm2))
+vec_F <- vector(length = length(aov_lm2))
+
+for (i in seq_len(length(aov_lm2))) {
+    if(!is.null(aov_lm2[[i]])) {
+        df <- summary(aov_after_qc[[i]])[[1]]
+        vec_F[i] <- df["batch_id", "F value"]
+        vec_P[i] <- df["batch_id", "Pr(>F)"]
+    }
+}
+
+#' study prep
+study_idx <- res$sample_type == "Study"
+res_study <- res[, study_idx]
+
+aov_lm2_s <- apply(log2(assay(res_study, "norm_lm2")), MARGIN = 1,
+                      FUN = aov_fun, i_d = res_study$batch_id , simplify = FALSE)
+
+# get f value for each feature, super annoying the result format is weird
+vec_P_s <- vector(length = length(aov_lm2_s))
+vec_F_s <- vector(length = length(aov_lm2_s))
+for (i in seq_len(length(aov_lm2_s))) {
+    if(!is.null(aov_lm2_s[[i]])) {
+        df <- summary(aov_lm2_s[[i]])[[1]]
+        vec_F_s[i] <- df["batch_id", "F value"]
+        vec_P_s[i] <- df["batch_id", "Pr(>F)"]
+    }
+}
+
+
+## plot all together
+png(paste0(dr, "anova_norm_2strategy_qc.png"), width = 15, height = 8, units = "cm",
+    res = 600, pointsize = 4)
+plot(sort(vec_F_before_qc), col= "black",
+     main = "QC samples between batch F value before (black), after (red) 2- step and (blue) combined lm norm",
+     xlab = "rank")
+points(sort(vec_F_after_qc), col = "red")
+points(sort(vec_F), col = "blue")
+dev.off()
+
+png(paste0(dr, "anova_norm_2strategy_study.png"), width = 15, height = 8, units = "cm",
+    res = 600, pointsize = 4)
+plot(sort(vec_F_before_s), col= "black",
+     main = "Study samples between batch F value before (black) and after (red) 2- step and (blue) combined lm norm",
+     xlab = "rank")
+points(sort(vec_F_after_s), col = "red")
+points(sort(vec_F_s), col = "blue")
+dev.off()
+
+```
+
+# Save Summarized experiment
+
+```{r SummarizedExperiment}
+#' Extract results as a SummarizedExperiment
+head(res)
+save(res, file = paste0(RDATA_PATH, "SumExp_chris_norm.RData")) #save under results
+
+#tmp <- assay(res, 'raw_filled')
+#' 11:
+#' raw
+#' raw_filled
+#' raw_filled_imputed
+#' norm
+#' norm_imputed
+#' norm_wb
+#' norm_wb_imputed
+#' norm_bb_imputed
+#' norm_bb
+#' res_qc
+#' norm_lm2
+#' norm_lm2_imputed
+#' ??
+head(tmp)
+```
+
+# Acknowledgments
+
+Consulted sources used as basis for code:
+
+- NAFLD_Norm_pos.Rmd
+
+# Session information
+
+R packages used for the analysis:
+
+```{r}
+sessionInfo()
+```
+
+# References
