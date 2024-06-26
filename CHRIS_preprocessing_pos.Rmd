@@ -1722,12 +1722,12 @@ save(blank_sample, file = paste0(RDATA_PATH, "blank_chris.RData"))
 save(chris, file = paste0(RDATA_PATH, "samples_chris.RData"))
 
 #' write feature matrix for manual inspection
-handle <- file.path(DATA_PATH, 'vmatrix_chris_pos.txt')
-write.table(featureValues(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+#handle <- file.path(DATA_PATH, 'vmatrix_chris_pos.txt')
+#write.table(as.data.frame(featureValues(chris)), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
 
 #' write feature information for manual inspection
 handle <- file.path(DATA_PATH, 'vm_chris_pos.txt')
-write.table(featureDefinitions(chris), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+write.table(as.data.frame(featureDefinitions(chris)), file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
 
 ```
 
@@ -1801,8 +1801,16 @@ Example 2: histidine
 ![](`r file.path(IMAGE_PATH, "EIC_standards/full/4_aftercorrespondence/EIC_histidine.png") ` )
 
 
+# Acknowledgments
+
+Consulted sources used as basis for code:
+
+- NAFLD_Prepro_pos.Rmd
+- end-to-end-untargeted-metabolomics.Rmd
 
 # Session information
+
+R packages used for the analysis:
 
 ```{r}
 sessionInfo()
