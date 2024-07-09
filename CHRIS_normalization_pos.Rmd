@@ -62,8 +62,8 @@ filename <- "CHRIS_normalization_pos"
 
 #' Path to save images to; remove if exists.
 IMAGE_PATH <- paste0("images/", filename, "/")
-if (file.exists(IMAGE_PATH))
-    unlink(IMAGE_PATH, recursive = TRUE)
+#if (file.exists(IMAGE_PATH))
+#    unlink(IMAGE_PATH, recursive = TRUE)
 dir.create(IMAGE_PATH, recursive = TRUE)
 
 #' Path to store RData files
@@ -88,13 +88,14 @@ library(Spectra)
 library(RColorBrewer)
 library(pander)
 library(readxl)
+library(MetaboAnnotation)
 library(MetaboCoreUtils)
 library(MsBackendSql)
 #library(CompMetaboTools)
 library(SummarizedExperiment)
 library(ggfortify)
-
 library(ggplot2)
+
 ```
 
 
@@ -136,10 +137,10 @@ plot_pca <- function(scores, comp, col_palette) {
   ggplot(data = scores, aes(x = PC1, y = PC2), label = rownames(scores)) +
       geom_hline(yintercept = 0, colour = "gray65") +
       geom_vline(xintercept = 0, colour = "gray65") +
-      geom_point(aes(fill=comp,shape=comp), color='black',size=1) +
-	  theme_customgridbox() +
+      geom_point(aes(fill = comp, shape = comp), color = 'black', size = 1) +
+	    theme_customgridbox() +
       ggtitle("PCA score plot") +
-      scale_shape_manual(values=shapes) +
+      scale_shape_manual(values = shapes) +
       scale_color_discrete(col_palette)
 }
 
@@ -159,9 +160,9 @@ plot_pca <- function(scores, comp, col_palette) {
 ```{r load Rdata}
 #' Load preprocessing results
 load(file.path(SDATA_PATH, "SumExp_chris.RData")) #res is object
-#load(file.path(SDATA_PATH, "SumExp_chris_blank.RData"))
-#load(file.path(SDATA_PATH, "samples_chris.RData"))
-#load(file.path(SDATA_PATH, "blank_chris.RData"))
+load(file.path(SDATA_PATH, "SumExp_chris_blank.RData"))
+load(file.path(SDATA_PATH, "samples_chris.RData"))
+load(file.path(SDATA_PATH, "blank_chris.RData"))
 
 ## create a separate object for Pool_Dil and Pool_IS_dil because they affect PCA visualisaiton
 pool_dil_idx <- res$sample_type == "Pool_Dil"
@@ -193,7 +194,7 @@ names(col_batch_id) <- unique(res$batch_id)
 col_batches <- col_batch_id[res$batch_id]
 
 #' Injection index
-col_injection_index <- rainbow(length(unique(res$injection_index)))
+col_injection_index <- rainbow(length(unique(res$injection_index)))  #TODO... now issue cont/discrete bug....
 
 
 #' Impute missing values using uniform distribution
@@ -220,7 +221,7 @@ assays(res)$raw_filled_imputed <- t(tmp)
 
 ## Unsupervised
 
-```{r PCA-before-norm, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+```{r PCA-before-norm, fig.path = IMAGE_PATH}
 # With imputation
 vals <- assay(res, "raw_filled_imputed") |>
     log2() |>
@@ -251,17 +252,16 @@ plot(p)
 #    scale_color_manual(values = col_batch_id)
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
 #vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
 
 ```
-- PC1 batch and something else
+- PC1 batches left (scattered) and blank samples spread to bottom right
 - PC2 batches
-- PC3 orange batch ?
-- PC4 ??
+
 
 ### Intensity evaluation
 
@@ -327,7 +327,7 @@ This already give us an idea of the variation within batch
 
 ## Internal standard
 
-```{r is-before-norm, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
+```{r is-before-norm, eval = FALSE, fig.path = IMAGE_PATH, fig.height=7, fig.width=8}
 #' get the list
 intern_standard <- read.delim("internal_standards.txt")
 intern_standard <- intern_standard[!is.na(intern_standard$POS), ]
@@ -343,7 +343,6 @@ intern_standard[,"rtmin"] <- intern_standard[, "RT"] - 10
 intern_standard[,"rtmax"] <- intern_standard[, "RT"] + 10
 
 intern_standard$feature_id <- NA_character_
-library(MetaboAnnotation)
 
 #' identify features matching m/z and RT of internal standards. With
 #' mzColname and rtColname we specify the column names in query and target
@@ -422,9 +421,9 @@ plot_pca(pca_res, pc_x = 3, pc_y = 4, pch = 21,
          col = col_batches, bg = paste0(col_batches, 80))
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
-vals_id <- cbind(vals, injection_index = res$injection_index)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
+#vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index')
 
 ```
@@ -469,7 +468,7 @@ pandoc.table(QC_df, style = "rmarkdown", caption = cpt)
 
 ### Coef of variation of IS
 
-```{r CV-is-after_MS, include=TRUE, results = "asis"}
+```{r CV-is-after_MS, eval = FALSE, include=TRUE, results = "asis"}
 intern_standard$CV_Raw <- rowRsd(
     assay(res, "raw_filled")[intern_standard$feature_id, ], na.rm = TRUE)
 intern_standard$CV_Median_scaled <- rowRsd(
@@ -560,8 +559,8 @@ plot(p)
 #    scale_color_manual(values = col_batch_id)
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
 #vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
@@ -580,7 +579,7 @@ load(file.path(RDATA_PATH, "SumExp_chris_norm_MS.RData"))
 
 ## evaluate correlation to injection index
 
-```{r correlation-inj-idx-before, fig.path = IMAGE_PATH, fig.height=4, fig.width=9}
+```{r correlation-inj-idx-before, eval = FALSE, fig.path = IMAGE_PATH, fig.height=4, fig.width=9}
 #' Define a function to calculate the correlation per batches
 #test for one batch
 pool_index <- res$sample_type == "Pool"
@@ -817,8 +816,8 @@ plot(p)
 #    scale_color_manual(values = col_batch_id)
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
 #vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4,
@@ -1063,8 +1062,8 @@ plot(p)
 #    scale_color_manual(values = col_batch_id)
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
 #vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
@@ -1156,8 +1155,8 @@ plot(p)
 #    scale_color_manual(values = col_batch_id)
 
 #' injection index
-p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
-plot(p)
+#p <- plot_pca(as.data.frame(pca_res$x), res$injection_index, col_injection_index)
+#plot(p)
 #vals_id <- cbind(vals, injection_index = res$injection_index)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', scale = 0)
 #autoplot(pca_res, data = vals_id, colour = 'injection_index', x = 3, y = 4, scale = 0)
