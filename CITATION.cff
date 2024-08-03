@@ -1,0 +1,19 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: >-
+  Pre-processing of the untargeted metabolomics data from
+  CHRIS
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Marilyn
+    family-names: De Graeve
+    email: marilyndegraeve@eurac.edu
+    affiliation: Eurac Research
+    orcid: 'https://orcid.org/0000-0001-6916-401X'
+repository-code: >-
+  https://github.com/EuracBiomedicalResearch/metabo_chris_untargeted/tree/main
