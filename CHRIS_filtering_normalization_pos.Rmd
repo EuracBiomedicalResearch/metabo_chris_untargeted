@@ -1,0 +1,736 @@
+---
+title: "CHRIS_filtering_normalization_pos"
+author: "Marilyn De Graeve, Philippine Louail, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-09-16"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+bibliography: references.bib
+---
+
+**Modified**: `r file.info("CHRIS_filtering_normalization_pos.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+library("BiocStyle")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, dev = "png",
+               dpi = 300)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+
+```
+
+# Introduction
+
+During this Rmd workflow, the metabolic feature filtering and normalization of
+the pre-processed untargeted metabolomics data of the Cooperative Health
+Research in South Tirol (CHRIS) study is performed. For a description of the
+study, methods used for the collection, handling and aqcuisition of the liquid
+chromatography-mass spectrometry (LC-MS) samples, please see
+[@verri_hernandes_age_2022]. Samples are acquired in both positive and negative
+ionization mode, for which the pre-processing of the positive (pos) mode is
+performed and discussed in the Rmarkdown document `CHRIS_preprocessing_pos.Rmd`.
+
+# Setup
+
+## Directories
+
+```{r directories, echo = FALSE}
+#' General settings
+filename <- "CHRIS_filtering_normalization_pos"
+
+#' Path to save images to; remove if exists.
+IMAGE_PATH <- paste0("images/", filename, "/")
+dir.create(IMAGE_PATH, recursive = TRUE)
+
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to the data
+#SDATA_PATH <- '/home/mdegraeve/Documents/Files/Work_Eurac/Data/CHRIS' #FINDME!
+SDATA_PATH <- "data"
+#DATA_PATH <- "."
+DATA_PATH <- "data"
+
+```
+
+## Packages
+
+```{r packages, message=FALSE}
+library(MsExperiment)
+library(RSQLite)
+library(xcms)
+library(Spectra)
+library(RColorBrewer)
+library(pander)
+library(readxl)
+library(reshape2)
+library(MetaboAnnotation)
+library(MetaboCoreUtils)
+library(MsBackendSql)
+library(SummarizedExperiment)
+library(ggfortify)
+library(ggplot2)
+
+```
+
+
+## functions
+
+```{r plot-functions}
+#' fast computational PCA score plotting functions
+#' https://ggplot2.tidyverse.org/reference/scale_shape.html
+shapes <- c(21, 24, 22, 23) #, 16, 17, 15, 18, 1, 2, 0, 5, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20) #25 available, pick coloreble ones
+shapes <- rep(shapes,100)
+
+theme_customgridbox<- function () {
+  theme(legend.position = "right",
+  legend.title = element_text(face="bold",size=18),
+  legend.text = element_text(size=18),
+  legend.key = element_rect(fill=NA),
+  axis.title = element_text(size=16),
+  axis.text = element_text(size=16,colour="black"),
+  axis.ticks = element_line(colour = "black"),
+  plot.title = element_text(face="bold",size=18,hjust=0.5),
+  panel.background = element_rect(fill=NA),
+  panel.grid.major = element_line(colour="grey80"),
+  panel.border = element_rect(fill=NA,size=1))
+}
+plot_pca <- function(scores, comp, col_palette) {
+  ggplot(data = scores, aes(x = PC1, y = PC2), label = rownames(scores)) +
+      geom_hline(yintercept = 0, colour = "gray65") +
+      geom_vline(xintercept = 0, colour = "gray65") +
+      geom_point(aes(fill = comp, shape = comp), color = 'black', size = 1) +
+	    theme_customgridbox() +
+      ggtitle("PCA score plot") +
+      scale_shape_manual(values = shapes) +
+      scale_color_discrete(col_palette) +
+      guides(colour ='none', fill = 'none', shape = 'none')
+}
+plot_multiboxplot <- function(df) {
+  ggplot(df, aes(x = variable, y = value, fill = col)) +
+      geom_boxplot() +
+      #geom_jitter(alpha = 0.5, color= "gray65", height = 0, width = 0.3, size = 0.1) +
+      labs(title = "",
+           y = "CV distribution of QC",
+           x = "Batch") +
+      scale_color_manual(col) +
+      theme_customgridbox() +
+      theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 7),
+            legend.position="none")
+}
+
+#' testing
+#scores <- as.data.frame(pca_res$x)
+#comp <- as.factor(res$sample_type)
+#length(comp)
+#col_palette <- col_phenotype
+
+
+#' Impute missing values using uniform distribution
+na.unidis <- function(z) {
+    na <- is.na(z)
+    if (any(na)) {
+        min = min(z, na.rm = TRUE)
+        z[na] <- runif(sum(na), min = min/2, max = min)
+    }
+    z
+}
+
+```
+
+# Load data
+
+```{r load Rdata}
+#' Load preprocessing results
+load(file.path(SDATA_PATH, "SumExp_chris_norm.RData")) #res is object
+
+```
+
+# 1. Removal of blanks
+
+Remove the blanks, plot PCA and boxplots of CVs before normalisation.
+
+```{r blank-removal}
+#' Restrict to Study and Pool samples
+res <- res[,res$sample_type != "Blank"]
+print('nr of study and pool samples without blank samples:')
+dim(res)
+res$sample_type <- as.factor(res$sample_type)
+
+## check all good, OK
+#res$sample_type
+#unique(res$batch_id)
+
+#' Define colors for the groups.
+#' Sample type
+#col_phenotype <- brewer.pal(5, "Accent")[c(1, 5)]
+col_phenotype <- brewer.pal(5, "Accent")[c(1, 2)]
+names(col_phenotype) <- c("Study", "Pool")
+
+#' Batches
+#' Define a unique color for each batch.
+col_batch_id <- rainbow(length(unique(res$batch_id)))
+names(col_batch_id) <- unique(res$batch_id)
+
+```
+
+For all calculations, use raw_filled. Never use the imputed values unless
+for PCA plotting, as you incoporate noise as signals and by doing so, add
+variance.
+
+```{r before-norm, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+#' filter met_data with selection
+met_data <- t(assays(res)$raw_filled)  #FINDME
+dim(met_data)
+
+tmp <- met_data  #see other script
+#tmp[1:10, 1:10]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+#qc_data[1:10, 1:10]
+#dim(qc_data)
+#rownames(qc_data)
+#qc_data[1:10,1:10]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+#median(df_with_CV_values$CV_values)
+#mean(df_with_CV_values$CV_values)
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
+    rownames(met_data) <- tmp$sample_id
+
+    #' calc CVs
+    cv_values <- apply(met_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+#' summary
+#summary(df_with_CV_values)
+
+```
+
+
+# 2. Filter >=80% abundance in QCs
+
+Retain variable in present in 80% of the QCs samples.
+
+```{r filter_80, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+#' transpose data, matrix metabolomics as cols
+met_data <- t(assays(res)$raw_filled)                        #FIND_ME!!!
+#met_data <- t(assays(res)$raw_filled_imputed)
+rownames(met_data) <- res$sample_id
+#met_data[1:10,1:10]
+#dim(met_data)
+
+#' keep only pool samples
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+qc_data[1:10, 1:10]
+
+#calc if feat is present/mearured in QC sample, using bool
+number_QCs <- nrow(qc_data)
+#perc_present <- colSums(qc_data != 0)/ number_QCs
+perc_present <- colSums(!is.na(qc_data))/ number_QCs  #with 'raw'
+matrix_with_perc_present <- data.frame(x=colnames(qc_data), y=perc_present)
+names(matrix_with_perc_present) <- c("CompID", "perc_present")
+#head(matrix_with_perc_present)
+#min(matrix_with_perc_present$perc_present)
+print('feats before filtering:')
+print(nrow(matrix_with_perc_present))
+
+#' retain variable in present in 80% of the QCs samples
+retained_variables_QCpool <- matrix_with_perc_present[(matrix_with_perc_present[,2] >= 0.80),]
+print('feats after filtering:')
+print(nrow(retained_variables_QCpool))
+head(retained_variables_QCpool)
+
+#' => So, all features remain! i.e. are present in min 80percent of the QCs. in case
+#' if use 'raw': 3916/19401 (with NA)
+#' raw_filled: 18603/19401 (with NA)
+#' 'raw_filled_imputed: 19401/19401 (with 0)
+#' DON'T use further
+
+#' filter met_data with selection
+met_data <- t(assays(res)$raw_filled)  #FINDME
+met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+print('nr of features left, no NAs:')
+dim(met_data_filtered)
+
+
+tmp <- met_data_filtered
+#tmp[1:10, 1:10]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data_filtered[grep("POOL_", rownames(met_data_filtered)), ]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
+    rownames(met_data) <- tmp$sample_id
+
+    #' rm features filterad above
+    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]   #80percent QCs presence
+
+    #' calc CVs
+    cv_values <- apply(met_data_filtered, 2, function(x) sd(x)/mean(x)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+```
+
+All features are kept, as there there is a singal >0 for each pool sample in
+each. this is result fron gap filling ('raw_filled_imputed'). No, also th case
+with 'raw' feature table.
+
+
+# 3. Filter if CV>1.0 of QCs
+
+Delete variables with coeficent of variation of QCs > 1.0 of pool samples.
+
+```{r CV_30_filter2, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+#' transpose data, matrix metabolomics as cols
+met_data <- t(assays(res)$raw_filled)                        #FIND_ME!!!
+rownames(met_data) <- res$sample_id
+#met_data[1:10,1:10]
+#dim(met_data)
+
+#' keep only pool samples
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+qc_data[1:10, 1:10]
+
+#' Delete variables with coeficent of variation of QCs > 30%
+CV_values <- apply(qc_data, 2, function(x) sd(x)/mean(x))
+
+#' testing
+#sd(qc_data[,1]) #FT00001 NA
+#mean(qc_data[,1])
+#sd(qc_data[,77]) #FT00077 FT00077 0.5187803
+#mean(qc_data[,77])
+
+matrix_with_CV_values <- data.frame(x=colnames(qc_data), y=CV_values)
+names(matrix_with_CV_values) <- c("CompID", "CV_values")
+head(matrix_with_CV_values)
+min(matrix_with_CV_values$CV_values)
+max(matrix_with_CV_values$CV_values)
+summary(matrix_with_CV_values$CV_values)
+print('feats before filtering:')
+print(nrow(matrix_with_CV_values))
+
+retained_variables_CV <- matrix_with_CV_values[(matrix_with_CV_values[,2] <= 1.0),]
+#print('feats after filtering:')
+#print(nrow(retained_variables_CV))
+
+#' => So, all features should be removed, NOK
+#' allCV-value = NAs with raw, raw_filled, so rm all with min 1x NA:
+#' raw: 0/19401, also some not NA but >0.3
+#' raw_filled: 0/19401, also some not NA but >0.3
+#' with raw_filled-imputed: 0/19401, lowest is 0.40 so rm all...
+#' print('number of feats which can be removed:')
+#print(nrow(matrix_with_CV_values) - nrow(retained_variables_CV))
+#head(retained_variables_CV)
+
+
+#' filter in addition to the previous filter (80percent)
+met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]
+print('nr of features left, no NAs:')
+dim(met_data_filtered2)
+
+tmp <- met_data_filtered2
+#tmp[1:10, 1:10]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data_filtered2[grep("POOL_", rownames(met_data_filtered2)), ]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
+    rownames(met_data) <- tmp$sample_id
+
+    #' rm features filtered above
+    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]   #80percent QCs presence
+    met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
+
+    #' calc CVs
+    cv_values <- apply(met_data_filtered2, 2, function(x) sd(x)/mean(x)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+```
+
+
+# 4. Between sample - median scaling
+
+The median scaling was previously performed in the `CHRIS_normalisation_pos.Rmd`
+experiment, according to the workflow followed for the NAFLD study. Here, the
+corresponding msexperiment assay `norm` was loaded.
+
+```{r median-scaling2, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+#' filter met_data with selection
+met_data <- t(assays(res)$norm)    #the median scaled MSexperiment
+dim(met_data)
+met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+dim(met_data_filtered)
+met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
+dim(met_data_filtered2)
+
+tmp <- met_data_filtered2
+#tmp[1:10, 1:100]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data_filtered2[grep("POOL_", rownames(met_data_filtered2)), ]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$norm)             #median scaled
+    rownames(met_data) <- tmp$sample_id
+
+    #' rm features filterad above
+    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+    met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
+
+    #' calc CVs
+    cv_values <- apply(met_data_filtered2, 2, function(x) sd(x)/mean(x)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+```
+
+
+# Write final feature table
+
+FINDME!!! how to save this into the res object, if less features present?  The
+`met_data` and `SM` dataframe with QCs present are saved for MVA outside this R
+markdown report.
+
+```{r save met_data}
+#' save for below and in the other experiments
+save(met_data_filtered2, file = paste0(RDATA_PATH, "met_data_filtered_norm.RData"))
+
+#' save SM df
+handle <- file.path(DATA_PATH, 'CHRIS_filtered_norm_VM.txt')
+write.table(met_data_filtered, file=handle, sep ="\t", row.names = TRUE, col.names = TRUE)
+
+```
+
+
+# Evaluate using CV of QC pool values
+
+See consecutive effect on the CV of pooled QCs, and number of remaining features
+in the analysis, per step.
+
+normalization strategy  |  mean    |  features remain
+_____________________________________________________
+raw_filled + blank rm   |  1.0480  |  19401
+" + ft80pool filter     |  1.0480  |  18603
+" + 1.0CVpool filter    |  0.7982  |  2599
+" + median scaling      |  0.8073  |  2599
+
+
+# Acknowledgments
+
+Consulted sources used as basis for code:
+
+- Pipeline_metabolomics (Marilyn)
+- NAFLD_Norm_pos.Rmd
+
+
+# Session information
+
+R packages used for the analysis:
+
+```{r}
+sessionInfo()
+
+```
+
+
+# References
