@@ -1,0 +1,1499 @@
+---
+title: "CHRIS_semi_targeted_annotation"
+author: "Marilyn De Graeve, Nikola Dordevic, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-09-30"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+bibliography: references.bib
+---
+
+**Modified**: `r file.info("CHRIS_semi_targeted_annotation.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+library("BiocStyle")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, dev = "png",
+               dpi = 300)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+
+```
+
+# Introduction
+
+During this workflow, we aim to identify analytes (semi targeted) co-aqcuired with the untargeted metabolomics data of
+the Cooperative Health Research in South Tirol (CHRIS) study. For a
+description of the study, methods used for the collection, handling and
+aqcuisition of the liquid chromatography-mass spectrometry (LC-MS) samples,
+please see [@verri_hernandes_age_2022]. 
+Samples are acquired in both positive and negative
+ionization mode, for which the pre-processing of the positive (pos) mode is
+performed and discussed in the Rmarkdown document `CHRIS_preprocessing_pos.Rmd`. 
+The (feature) filtering and normalization of the positive (pos)
+mode is discussed in the Rmarkdown document `CHRIS_filtering_normalization_pos.Rmd`.
+
+
+# Setup
+
+## Directories
+
+```{r directories, echo = FALSE}
+#' General settings
+filename <- "CHRIS_semi_targeted_annotation"
+
+#' Path to save images to; remove if exists.
+IMAGE_PATH <- paste0("images/", filename, "/")
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to the data
+#SDATA_PATH <- '/home/mdegraeve/Documents/Files/Work_Eurac/Data/CHRIS' #FINDME!
+SDATA_PATH <- "/data/massspec/Biocrates/CHRIS"
+#DATA_PATH <- "."
+DATA_PATH <- "data"
+
+```
+
+## Packages
+
+```{r packages, message = FALSE, echo = FALSE}
+library(chrisUtils)
+library(chrisData)
+library(MsExperiment)
+library(RSQLite)
+library(xcms)
+library(Spectra)
+library(RColorBrewer)
+library(pander)
+library(readxl)
+library(reshape2)
+library(MetaboAnnotation)
+library(MetaboCoreUtils)
+library(MsBackendSql)
+library(SummarizedExperiment)
+library(ggfortify)
+library(ggplot2)
+library(tidyfr)
+
+```
+
+
+# Load data
+
+We load the feature matrix of the latest CHRIS preprocessing, feature filtering 
+and normalisation strategy applied. The filtered df is not used further, since it does not 
+contain the feature info from PP (i.e., rtmed and mzmed).
+
+```{r load Rdata filtered df}
+#' Load preprocessing results smexperiment
+load(file.path(DATA_PATH, "SumExp_chris_norm.RData")) #res is object
+#load(file.path(DATA_PATH, "SumExp_chris_filtered_norm.RData")) #res is object NOT USE, found stds are in the removed FTs (of 3820#)!!! #' discarded were "Creatinine" [bad] and "Serotonin" [good] (from p180).
+res <- res[,res$sample_type != "Blank"]
+dim(res)
+
+met_data <- t(assays(res)$norm_bb)  #raw_filled norm norm_bb FIND_ME!!! OK, evaluated in corr, plots. keep norm_bb
+met_data <- as.data.frame(met_data)
+dim(met_data)
+
+#' Load df after filtering (contains feats to keep)
+#load(file.path(SDATA_PATH, "met_data_filtered_norm.RData")) #met_data_filtered2 is df
+#dim(met_data_filtered2)
+
+#' remove QCs for the naming issue, see FINDME
+bio_data <- met_data[grep("_001", rownames(met_data)), ]
+tmp <- res[, res$sample_type == "Study"]
+
+#' somehow not same length, so keep FINDME
+#bio_data <- bio_data[rownames(bio_data) %in% tmp$file_name,]  
+tmp <- tmp[, tmp$file_name %in% rownames(bio_data)]
+rownames(bio_data) <- tmp$sample_id     #duplicates POOL_1 #FINDME better solution so keep them in
+dim(bio_data)
+dim(tmp)
+
+```
+
+Therefore, we load the xcms experiment containing the study samples and QC pool samples instead.
+
+```{r load xcms experiment}
+#' load xcmsexperment
+load(file.path(DATA_PATH, "samples_chris.RData")) #chris is xcmsexp object
+chris
+
+```
+
+For which we define colors.
+
+```{r define_colors, include = FALSE}
+#' Define colors for the groups.
+#' color code according to sample_type
+col_sampletype <- brewer.pal(8, "Accent")[c(1, 5, 8)]
+names(col_sampletype) <- c("Study", "Pool", "Blank")
+
+#' Define a unique color for each batch.
+col_batch <- rainbow(length(unique(sampleData(chris)$batch_id)))
+names(col_batch) <- unique(sampleData(chris)$batch_id)
+
+#' Define a color for each sample
+col_samples <- col_sampletype[sampleData(chris)$sample_type]
+col_batches <- col_batch[sampleData(chris)$batch_id]
+
+pool_index <- which(sampleData(chris)$sample_type == "Pool")
+batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
+
+```
+
+We load below the most likely adduct and the expected retention time for the 
+standards defined in the lcms-standards repository (http://github.com/EuracBiomedicalResearch/lcms-standards).
+
+```{r known-cmps, warning = FALSE}
+## Calculate m/z and values for expected ions of known compounds.
+std_info <- read.table(
+"https://raw.githubusercontent.com/EuracBiomedicalResearch/lcms-standards/master/data/standards_dilution.txt",
+    sep = "\t", header = TRUE, as.is = TRUE)
+std_info <- std_info[!is.na(std_info[, "POS"]), ]
+std_info <- std_info[order(std_info$name), ]
+std_info$exact_mass <- calculateMass(std_info$formula)
+std_info$mz_ion <- mapply(std_info$exact_mass, std_info$POS, FUN = mass2mz)
+
+print('nr of stds to be checked:')
+nrow(std_info) #214
+
+```
+
+
+# Subset data, needed for visual EIC evaluation
+
+Subset the filtered feature df to find in QC pool samples, for batch 1. 
+
+```{r subset data df, eval = FALSE}
+#' keep only pool samples, do above depending filter
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+qc_data <- as.data.frame(qc_data)
+
+#info batches not loaded, for now, take first 10 samples, as 10 QCs in batch1 
+qc_data <- qc_data[1:10, ]
+dim(qc_data)
+
+```
+
+This needs to be performed in the xcms experiment, instead of in the filtered feature df.
+
+```{r subset xcmsexp chris}
+#' first run for selection good stds:
+BATCHNR <- 1
+chris <- chris[grep(unique(sampleData(chris)$batch_id)[BATCHNR],
+                    sampleData(chris)$batch_id, fixed = TRUE),
+               keepAdjustedRtime = TRUE, keepFeatures = TRUE]
+
+#' keep only pool samples
+pool_index <- which(sampleData(chris)$sample_type == "Pool")
+chris <- chris[pool_index, keepAdjustedRtime = TRUE,
+                      keepFeatures = TRUE]
+
+#save(chris, file = paste0(RDATA_PATH, "chris_10QCs.RData"))
+
+
+#' second run for selection good stds:
+#' keep min 1 QC and min 3 biol samples per batch, total 5 samples per batch (n=455)
+#chris <- chris[sampleData(chris)$injection_index %in% c(37, 52, 53, 60, 63),
+#               keepAdjustedRtime = TRUE, keepFeatures = TRUE]
+
+#save(chris, file = paste0(RDATA_PATH, "chris_455bioqs.RData"))
+
+
+#' Update indices and colors.
+col_samples <- col_sampletype[sampleData(chris)$sample_type]
+col_batches <- col_batch[sampleData(chris)$batch_id]
+#pool_index <- which(sampleData(chris)$sample_type == "Pool")
+#batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
+#chris_pool <- chris[pool_index, keepAdjustedRtime = TRUE]
+#chris_raw_pool <- chris_raw[pool_index, keepAdjustedRtime = TRUE]
+
+#sampleData(chris)
+chris
+
+```
+
+
+# Annotation of features
+
+We next annotate features in the present data set using retention times and m/z
+values determined for ions of pure standards. This information can later be used
+in a *semi-targeted* analysis, i.e. focusing the analysis on features that could
+be annotated to compounds.
+
+The retention times and ions (and hence m/z values) are available in the
+`std_info` variable. We first identify features in our data set that match m/z
+values for the standards.
+
+We next match features from our data set against m/z of the expected ions and
+the retention times for the set of lab-internal standards, extract their ion
+chromatogram and plot these.
+
+The R package MetaboAnnotation is utilized for this section.
+
+```{r match_semi_targeted_to_umetab}
+#' Match feature's m/z and rt values against expected values for standards.
+#' #?matchValues #current name of matchMz, also works on df
+featureDefinitions(chris)$feature_id <- rownames(featureDefinitions(chris))
+par <- MzRtParam(tolerance = 0, ppm = 30, toleranceRt = 15)
+
+mo <- matchMz(featureDefinitions(chris), std_info,
+              param = par, mzColname = c("mzmed", "mz_ion"),
+              rtColname = c("rtmed", "RT"))
+
+#' Subset to matching features.
+mo <- mo[whichQuery(mo)]
+mo <- pruneTarget(mo)
+
+```
+
+For manual evaluation, done twice for subsets. Skip for report. 
+We filter the untargeted metabolomics CHRIS data in two ways for evaluation of EICs:
+
+- first, keeping the 10 QC pool of the first batch.
+- second, keeping 455 samples (min 1 QC and min 3 biol samples) across all batches.
+
+```{r make EIC plots, eval = FALSE}
+#' Get EICs for each feature
+chrs <- featureChromatograms(
+    chris, features = mo$feature_id, expandRt = 10, filled = TRUE)  #slow: 5 min 10s, 455s >18m=50%
+
+dr <- file.path(IMAGE_PATH, "standard_features")
+dir.create(dr, showWarnings = FALSE)
+for (i in seq_len(nrow(chrs))) {
+    chr <- chrs[i, ]
+    pks <- chromPeaks(chr)
+    fl <- mo$target_name[i]
+    png(paste0(dr, "/", mo$feature_id[i], "-", fl, ".png"),
+        width = 12, height = 8, units = "cm", res = 300, pointsize = 6)
+    plot(chr, col = "#00000040",
+         peakCol = paste0(col_samples[pks[, "column"]], 50),
+         peakBg = paste0(col_samples[pks[, "column"]], 10))
+    abline(v = mo$target_RT[i])
+    drt <- format(mo$score_rt[i], digits = 3)
+    dmz <- format(mo$ppm_error[i], digits = 3)
+    legend("topleft", legend = c(mo$feature_id[i], fl,
+                                 paste0("delta rt [s]: ", drt),
+                                 paste0("delta mz [ppm]: ", dmz)))
+    dev.off()
+}
+
+```
+
+The EICs have been manually inspected in two iterations.
+
+- first, standards with good peak shape, rt, intensity are pre-selected using the 10 QC pool of the first batch.
+- second, good peaks are selected in the 455 samples (min 1 QC and min 3 biol samples) across all batches.
+
+The best matching feature has been manually assigned to the corresponding standard.
+
+```{r assign-feature-metabolite, echo = FALSE, warning = FALSE, message = FALSE}
+#' - Use paste0(mo$feature_id, " = \"", mo$target_name, "\"\n") |> cat()
+#'   to create the full mapping of features to metabolites and then
+#'   'comment' the lines that do not match. Can see the evaluation here.
+#' - Visually inspect all feature-compound mapping plots:
+#'   - keep if there is a single feature for a compound and RT and m/z are
+#'     similar
+#'   - drop all lines that are far off, or where the signal is ambiguous (i.e.
+#'     there are multiple peaks and it's not clear which one it could be).
+
+
+#' selection after inspect in BOTH 10qc of 1st batch + 455s from all batches:
+#' ! for info: the 2 peaks comment applied in the 2nd iter, it was mostly 1 nice peak in 1 batch.
+#' ! some are good (eg leu, glc, adma, guan, lact) but are isoforms so actually sum of both or can't be sure which
+#' all original are still here, just in comments if bad
+to_keep <- c(
+  FT00059 = "Trimethylamine",
+  #FT00162 = "Putrescine",  #2 peaks
+  FT00198 = "Glycine",
+  #FT00349 = "Alanine",   #2 peaks
+  #FT00507 = "Dimethylglycine",   #2 peaks
+  #FT00510 = "Choline",  #ugly
+  FT00531 = "Serine",    
+  FT00666 = "Creatinine", #ugly
+  #FT00698 = "Proline",  #2 peaks
+  FT00739 = "Acetylglycine",  #ok but low intens
+  #FT00741 = "Guanidoacetic acid",  #2p + low I
+  #FT00743 = "Betaine", #flat signal
+  #FT00743 = "Valine", #flat signal
+  #FT00745 = "Betaine", # multiple peaks
+  #FT00745 = "Valine", # multiple peaks
+  FT00769 = "Threonine",
+  FT00796 = "Phenylethylamine",
+  #FT00797 = "Phenylethylamine",  #noise
+  #FT00799 = "Phenylethylamine", #noise
+  FT00812 = "Niacinamide", #ok but low
+  #FT00814 = "Niacinamide",  #noise
+  FT00888 = "Taurine",
+  FT00904 = "3-Hydroxybutyric Acid",
+  FT00949 = "5-Oxoproline",  #partially in noise, good in B1
+  #FT00955 = "Pipecolic acid",  # multiple peaks
+  FT00979 = "Ketoleucine",
+  FT01007 = "Hydroxyproline",
+  #FT01008 = "Acetylalanine",  # multiple peaks
+  #FT01008 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01009 = "Acetylalanine",  # multiple peaks
+  #FT01009 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01010 = "Creatine",   #2 peaks
+  #FT01013 = "Isoleucine",  #good but indisrim to Leu, skip
+  #FT01013 = "Leucine",     #good but indisrim to Ile, skip
+  #FT01014 = "Isoleucine",   #2nd option but same issue
+  #FT01014 = "Leucine",      #2nd option but same issue
+  FT01028 = "Asparagine",
+  FT01036 = "Ornithine",  #2 peaks
+  FT01049 = "L-Aspartic Acid",
+  FT01106 = "Hypoxanthine",  #in noise/noise, good in B1
+  #FT01165 = "Salicylic acid", #not found in enough samples, other compound
+  FT01252 = "Phosphorylethanolamine",
+  FT01300 = "Tryptamine",
+  FT01366 = "Phenylpyruvic acid", 
+  #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
+  FT01370 = "Glutamine",   #2 peaks
+  #FT01372 = "Glutamine",  #flat signal
+  FT01379 = "Lysine",  #higher prob other, less rtdev
+  #FT01380 = "Lysine",  #2 peaks
+  FT01398 = "N-Acetylserine",  #ok but low
+  FT01399 = "L-Glutamic Acid",
+  FT01440 = "Methionine",
+  FT01491 = "Guanine",   #ok but low
+  FT01514 = "Xanthine",  #ok but low
+  #FT01605 = "Histidine",  #yes but also next to it, drifts incl in B1
+  #FT01607 = "Histidine",  #no, next to it
+  FT01688 = "Threonic Acid",  #partially in noise, good in B1
+  FT01705 = "Serotonin",      #partially in noise, good in B1
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal
+  #FT01750 = "L-Carnitine",  #no, next to it
+  FT01751 = "L-Carnitine",  #big shoulder left but keep
+  FT01776 = "Nicotine",
+  #FT01777 = "Nicotine",  #no, next to it
+  FT01841 = "Methioninesulfoxide",
+  #FT01845 = "Phenylalanine",  #2 peaks, also in B1
+  #FT01873 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01942 = "1-Methylhistidine",   #no, next to it
+  FT01942 = "3-Methylhistidine",    #small shoulder but keep
+  FT01954 = "Glyceraldehyde 2-phosphate",
+  FT02090 = "N-Acetylornithine",  #flat but good shape in B1
+  FT02093 = "Arginine",
+  #FT02095 = "Arginine",  #no, next to it
+  FT02116 = "Indoleacetic acid",
+  FT02119 = "Citrulline",
+  FT02133 = "Ascorbic Acid",  #ok but low
+  #FT02192 = "Glucosamine",   #higher prob other, less rtdev
+  #FT02193 = "Glucosamine",   #higher prob other, less rtdev
+  FT02194 = "Glucosamine",
+  FT02216 = "Succinylacetone",  #ok but low
+  FT02240 = "Tyrosine",
+  FT02266 = "1-Methyluric acid", #ok but low
+  #FT02285 = "Pyridoxic Acid",  #noise shaped
+  FT02287 = "Phosphorylcholine",
+  FT02288 = "Epinephrine",  #not sure, high mzdev
+  #FT02289 = "Epinephrine", #not sure, high mzdev
+  #FT02378 = "1,5-anhydro D-glucitol", #noise
+  FT02564 = "Caffeine",
+  FT02614 = "Acetylhistidine",
+  #FT02732 = "Glucose",  #isoform same, multiple peaks
+  #FT02732 = "Mannose",  #isoform same, multiple peaks
+  #FT02733 = "Fructose", #flat
+  #FT02733 = "Glucose", #flat
+  #FT02733 = "Mannose", #flat
+  #FT02734 = "Fructose", #flat
+  #FT02734 = "Mannose", #flat
+  #FT02748 = "ADMA",  #isoform same
+  #FT02748 = "SDMA",  #isoform same
+  FT02767 = "Acetylcarnitine",
+  #FT02769 = "Acetylcarnitine", #no next to peak
+  #FT02783 = "Galactitol", #isoform same, also big dev
+  #FT02783 = "Sorbitol",   #isoform same, also big dev
+  #FT02784 = "Galactitol", #isoform same, also big dev
+  #FT02784 = "Sorbitol",   #isoform same, also big dev
+  FT02792 = "Tryptophan",
+  FT02809 = "Indolelactic acid",
+  FT02890 = "L-Kynurenine",  #ok but low
+  FT02934 = "L,L-Cyclo(leucylprolyl)",
+  FT03014 = "Citric Acid", #ok but low
+  #FT03015 = "Citric Acid",
+  FT03102 = "Gluconic Acid",  #ok but low
+  FT03125 = "Pantothenic Acid",  #ok but low
+  FT03180 = "Cystathionine", #ok but low
+  FT03229 = "Sebacic acid",  #ok but low
+  FT03288 = "Carnosine",  #flat
+  FT03407 = "C4 Carnitine",
+  #FT03408 = "C4 Carnitine", #flat
+  FT03589 = "Cystine",
+  #FT03668 = "Acetyl-Glucosamine", #higher prob other, less rtdev
+  FT03669 = "Acetyl-Glucosamine",
+  #FT03699 = "Uridine",  #noise
+  FT03724 = "C5 Carnitine",   #doubt if other molec
+  #FT03725 = "C5 Carnitine",  #flat
+  FT03969 = "Glycero-phosphocholine",
+  FT04213 = "Adenosine",  #ok but low
+  #FT04383 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  #FT04384 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  FT04679 = "8-Oxo-2-Deoxyguanosine",  #isoform same,
+  #FT04679 = "Guanosine",               #isoform same, keep for rt more diff
+  FT04881 = "Inosine",
+  FT05162 = "Sphingosine",
+  FT06922 = "Corticosterone",   #doubt if other molec
+  #FT06923 = "Corticosterone",  #other or shoulder
+  #FT07494 = "alpha-Lactose",   #isoform, multiple peaks
+  #FT07494 = "Sucrose",         #isoform, multiple peaks
+  FT07885 = "Riboflavin",  #partially in noise, ok but low in B1
+  FT07974 = "Sphingosine-1-phosphate",  #ok but low
+  FT08610 = "SAMe",  #partially in noise, ok but low in B1
+  FT08623 = "Palmitoylcarnitine"  #doubt if other molec
+)
+
+print('nr of found features in untargeted metabolimcs, so far:')
+length(to_keep)
+
+#' Keep only the manually selected matches.
+mo <- filterMatches(mo, queryValue = names(to_keep),
+                    targetValue = to_keep,
+                    queryColname = "feature_id",
+                    targetColname = "target_name",
+                    keep = TRUE)
+mo <- mo[whichQuery(mo)]
+mo <- pruneTarget(mo)
+
+print('features remain after manual inspection:')
+dim(matches(mo))
+
+#' Handling features mapping to multiple compounds: collapse the target name.
+std_features <- matchedData(
+    mo, c("feature_id", "target_name", "target_HMDB.code",
+          "ppm_error", "score_rt")) |>
+    as.data.frame()
+colnames(std_features)[colnames(std_features) == "score_rt"] <- "diff_rt"
+std_features <- split(std_features, std_features$feature_id)
+std_features <- lapply(std_features, function(z) {
+    tmp <- z[1L, ]
+    tmp$target_name <- paste0(z$target_name, collapse = ";")
+    tmp$target_HMDB.code <- paste0(z$target_HMDB.code, collapse = ";")
+    tmp$ppm_error <- mean(z$ppm_error)
+    tmp$diff_rt <- mean(z$diff_rt)
+    tmp
+}) |>
+    do.call(what = rbind)
+
+```
+
+From the in total `r nrow(featureDefinitions(chris))` features,
+`r length(unique(std_features$feature_id))` could be mapped to at least one of
+the `r nrow(std_info)` compounds for which retention times and *m/z* values are
+known.
+
+The distribution of differences in retention time and *m/z* error (in ppm) are
+shown below.
+
+```{r summary, results = "asis"}
+tmp <- rbind(diff_rt = quantile(abs(std_features$diff_rt)),
+             ppm_error = quantile(std_features$ppm_error))
+pandoc.table(tmp, style = "rmarkdown",
+             caption = paste0("Differences in retention times and m/z values ",
+                              "for *annotated* features."))
+
+print('stds percentile that have a ppm deviation below 5:')
+quantile(tmp, 0.80537) #approx 80% of found stds has ppm < 5
+
+```
+
+The annotated features, i.e. a df linking FTxx ID with the metabolite name from 
+lcms-standards, are saved for further evaluation.
+
+```{r, eval = !file.exists(paste0(RDATA_PATH, "std_features.RData"))}
+save(std_features, file = paste0(RDATA_PATH, "std_features.RData"))
+
+```
+
+
+# Evaluation of retained features 
+
+Load feature list with both FTxxx and the annotated name from lcms-standards.
+
+```{r load retained stds, eval = file.exists(paste0(RDATA_PATH, "std_features.RData"))}
+#' load feature list with both FTxxx and the annotated name from lcms-standards
+load(file.path(RDATA_PATH, "std_features.RData")) #std_features is df
+
+print('features remain after manual inspection:')
+dim(std_features)
+
+```
+
+
+## Overlapping with p180
+
+For the annotated features which are also measured using targeted metabolomics 
+(Biocratis kit p180), we will evaluate whether this feature is matching
+by correlation plot / sensitivity analysis on a subset of samples.
+
+Steps:
+
+- load p180
+
+```{r load_targeted_metab}
+#' load TDF using tidyfr
+#list_data_modules(path = DATA_PATH)
+p180 <- data_module(name = "metabolomics_p180", version = "1.0.1.2",
+                    path = SDATA_PATH)  #can only look in 'data', ignores correct path when .sh
+tmet_data <- data(p180)
+tmet_ann <- labels(p180)
+stopifnot(all(colnames(tmet_data) == rownames(tmet_ann)))
+
+#colnames(tmet_data) <- tmet_ann$description
+#colnames(tmet_data) <- tmet_ann$biochemical_name 
+colnames(tmet_data) <- tmet_ann$aliases
+#colnames(tmet_data) <- tmet_ann$hmdb_id
+
+tmet_ann <- tmet_ann[tmet_ann$type != "categorical",] #entry biochem name is double, so subset first
+
+#rownames(tmet_ann) <- tmet_ann$description
+#rownames(tmet_ann) <- tmet_ann$biochemical_name
+rownames(tmet_ann) <- tmet_ann$aliases
+#rownames(tmet_ann) <- tmet_ann$hmdb_id #nok, duplic and multiple entries
+
+#' define the columns with metabolite concentrations
+metabolites <- rownames(tmet_ann)[tmet_ann$type != "categorical"]
+
+#' select metabolites dataframe
+tmet_data <- tmet_data[, metabolites]
+
+```
+
+- subset feat tables of both the targeted and untargeted metabolomics to retain the std features only
+
+```{r subset to only the std features}
+#' subset p180, metabolites are columns (testing because name discrepancies)
+#tmet_data <- tmet_data[, colnames(tmet_data) %in% std_features$target_name]  #NOK, need abrev
+#dim(tmet_data)
+
+#check_description <- colnames(tmet_data) #3
+#check_biochemical_name <- colnames(tmet_data) #17
+#check_aliases <- colnames(tmet_data) #19
+
+#check <- unique(check_aliases, check_biochemical_name)
+#check <- unique(check, check_description) #19
+to_check <- c("Arginine",
+             "Asparagine",          
+             "Citrulline",         
+             "Creatinine",          
+             "Glutamine",           
+             "L-Glutamic Acid",     
+             "Glycine",            
+             "Lysine",              
+             "Methionine",          
+             "Methioninesulfoxide", 
+             "Ornithine",           
+             "Serine",              
+             "Serotonin",           
+             "Hydroxyproline",     
+             "Taurine",             
+             "Tryptophan",          
+             "Tyrosine",            
+             "L-Carnitine",         
+             "Acetylcarnitine")
+
+#' subset p180, metabolites are columns   
+tmet_data <- tmet_data[, colnames(tmet_data) %in% to_check]  #FIND_ME better way than iter possible columns
+dim(tmet_data) #19
+
+
+#' subset untarget feature table, metabolites are columns
+#' FINDME issue AIDs with names of QCs, so use temp bio_data
+met_data <- bio_data      #FINDME!!!
+met_data <- met_data[, colnames(met_data) %in% std_features$feature_id]
+dim(met_data) #72, all OK
+
+```
+- match the overlapping features and samples between tmetab and umetb
+
+```{r}
+#' replace FT names by common name from std_features
+tmp <- std_features[std_features$feature_id %in% colnames(met_data), ]   #order ascending/same ok
+colnames(met_data) <- tmp$target_name
+
+#' keep only stds, also found in the p180
+met_data <- met_data[, colnames(met_data) %in% colnames(tmet_data)]  
+#dim(met_data) #19
+
+#' samplenames also keep overlapping between umet and tmetab using AIDs 
+#' (in tmetab also nafd 008 study samples present)
+#' and reorder, as in umetab ordered sandom (as analysed on machine)
+met_data <- met_data[rownames(met_data) %in% rownames(tmet_data),] 
+met_data <- met_data[order(rownames(met_data), decreasing = FALSE),]
+tmet_data <- tmet_data[rownames(tmet_data) %in% rownames(met_data),]
+tmet_data <- tmet_data[order(rownames(tmet_data), decreasing = FALSE),]
+dim(met_data)
+dim(tmet_data)
+
+```
+
+- plot corr for each annotated feature and write plt to file
+Performed using log(2) scaled data for bothe datasets: the untargeted set were 
+median scaled + between batch normalized peak intensities; the targeted set were 
+absolute concentration.
+
+```{r compare_tmetab_umetab}
+#' order cols not the same, use names
+i <- 1
+to_check[i]
+
+#testing
+#met_data['0010000014', to_check[i]] #OK
+#log2(met_data['0010000014', to_check[i]])
+#log2(tmet_data['0010000014', to_check[i]])
+
+#' loop to safe plots
+for (i in 1:length(to_check)){
+  #print( i)
+  
+  #' merge in from both lm models above, 
+  #' both log2 scaled
+  tmp <- data.frame(sample_id = rownames(tmet_data),
+                    x = log2(tmet_data[, to_check[i]]),
+                    y = log2(met_data[, to_check[i]]))
+  head(tmp)
+  
+  #' for equation on plot
+  linear_eq <- function(x,y) {
+    #calculate equation (linear regression) and corresponding R2 value for on plot
+    m <- lm(y ~ x -1) #no negative pred conc allowed
+    eq <- as.character(
+      as.expression(
+        substitute(italic(y) == a %.% italic(x) + b*","~~italic(R)^2~"="~r2,
+                   list(a = format(round(coef(m)[1], digits=3),nsmall=3), #rico
+                        b = 0, #format(round(coef(m)[1], digits=3),nsmall=3), #intercept
+                        r2 = format(round(summary(m)$r.squared, digits = 3), nsmall=3)
+                        )
+        )
+      )
+    )
+    return(eq)
+  }
+  
+  #'calculate formula, R2 to add on plot
+  equation <- linear_eq(x = tmp$x, y = tmp$y) #eq writen for plot
+  #print('formula, R2:')
+  #equation
+  
+  #' scatterplot with coeff vales
+  scatter_plot <- function(data) {
+      ggplot(data, aes(x = x, y = y)) +
+          geom_point(aes(x,y), colour = "gray65") +
+          stat_smooth(method = lm, se = TRUE) + #with standard error
+          geom_text(x = -Inf, y = Inf, label = equation, parse = TRUE, vjust = 1.5, hjust = -0.1) +
+          theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8),
+                axis.title.y = element_blank()) +
+          labs(title = to_check[i],
+               x = 'targeted metabolomics',
+               y = 'untargeted metabolomics') +
+          theme_bw ()
+  }
+  
+  plt <- scatter_plot(tmp)
+  ggsave(paste0(IMAGE_PATH, 'tmetab_vs_umetab/norm_bb/', "corr_", to_check[i], ".png"),
+         plot = plt, dpi = 600, width = 12,
+         height = 12, units = "cm", scale = 2.5)
+  #plt
+
+}
+
+```
+
+- manual inspection. After manual inspection, the following std found in the 
+targeted metabolomics are saved to be used in the untargeted analysis. Note: For
+some samples, the intensity jumps down for the untargeted analysis, but the same 
+trend is followed against the p180 targeted metabolomics.
+
+```{r good-from-p180-keep}
+#' see comments next to it if good
+to_check <- c("Arginine",               #ok*, some samples/batch jump down signal but follows conc p180
+             "Asparagine",              #ok  
+             "Citrulline",              #ok
+             #"Creatinine",             #no, just 2 blobs but no line so remove
+             "Glutamine",               #? maybe? ok but few extreme outliers keep for now but flaw with label msmsm below
+             "L-Glutamic Acid",         #ok
+             "Glycine",                 #ok
+             "Lysine",                  #looks ok but less up, just blob
+             "Methionine",              #ok
+             "Methioninesulfoxide",     #? blob, keep for now but flaw with label msmsm below
+             "Ornithine",               #ok
+             "Serine",                  #ok
+             "Serotonin",               #ok
+             "Hydroxyproline",          #ok
+             "Taurine",                 #ok
+             "Tryptophan",              #ok
+             "Tyrosine",                #ok
+             "L-Carnitine",             #ok 
+             "Acetylcarnitine")         #ok*, 2nd batch jump down signal but follows conc p180
+
+print('nr of analytical standards from p180 found in untargeted metabolimcs:')
+length(to_check)
+
+```
+
+- to keep and subset the std_features
+
+```{r}
+#' manually subset the list to_keep (above with Feat names PP) with this found list
+#' all original are still here, just in comments if bad
+to_keep <- c(
+  FT00059 = "Trimethylamine",
+  #FT00162 = "Putrescine",  #2 peaks
+  FT00198 = "Glycine",
+  #FT00349 = "Alanine",   #2 peaks
+  #FT00507 = "Dimethylglycine",   #2 peaks
+  #FT00510 = "Choline",  #ugly
+  FT00531 = "Serine",    
+#  FT00666 = "Creatinine", #ugly
+  #FT00698 = "Proline",  #2 peaks
+  FT00739 = "Acetylglycine",  #ok but low intens
+  #FT00741 = "Guanidoacetic acid",  #2p + low I
+  #FT00743 = "Betaine", #flat signal
+  #FT00743 = "Valine", #flat signal
+  #FT00745 = "Betaine", # multiple peaks
+  #FT00745 = "Valine", # multiple peaks
+  FT00769 = "Threonine",
+  FT00796 = "Phenylethylamine",
+  #FT00797 = "Phenylethylamine",  #noise
+  #FT00799 = "Phenylethylamine", #noise
+  FT00812 = "Niacinamide", #ok but low
+  #FT00814 = "Niacinamide",  #noise
+  FT00888 = "Taurine",
+  FT00904 = "3-Hydroxybutyric Acid",
+  FT00949 = "5-Oxoproline",  #partially in noise, good in B1
+  #FT00955 = "Pipecolic acid",  # multiple peaks
+  FT00979 = "Ketoleucine",
+  FT01007 = "Hydroxyproline",
+  #FT01008 = "Acetylalanine",  # multiple peaks
+  #FT01008 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01009 = "Acetylalanine",  # multiple peaks
+  #FT01009 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01010 = "Creatine",   #2 peaks
+  #FT01013 = "Isoleucine",  #good but indisrim to Leu, skip
+  #FT01013 = "Leucine",     #good but indisrim to Ile, skip
+  #FT01014 = "Isoleucine",   #2nd option but same issue
+  #FT01014 = "Leucine",      #2nd option but same issue
+  FT01028 = "Asparagine",
+  FT01036 = "Ornithine",  #2 peaks
+  FT01049 = "L-Aspartic Acid",
+  FT01106 = "Hypoxanthine",  #in noise/noise, good in B1
+  #FT01165 = "Salicylic acid", #not found in enough samples, other compound
+  FT01252 = "Phosphorylethanolamine",
+  FT01300 = "Tryptamine",
+  FT01366 = "Phenylpyruvic acid", 
+  #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
+  FT01370 = "Glutamine",   #2 peaks
+  #FT01372 = "Glutamine",  #flat signal
+  FT01379 = "Lysine",  #higher prob other, less rtdev
+  #FT01380 = "Lysine",  #2 peaks
+  FT01398 = "N-Acetylserine",  #ok but low
+  FT01399 = "L-Glutamic Acid",
+  FT01440 = "Methionine",
+  FT01491 = "Guanine",   #ok but low
+  FT01514 = "Xanthine",  #ok but low
+  #FT01605 = "Histidine",  #yes but also next to it, drifts incl in B1
+  #FT01607 = "Histidine",  #no, next to it
+  FT01688 = "Threonic Acid",  #partially in noise, good in B1
+  FT01705 = "Serotonin",      #partially in noise, good in B1
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal
+  #FT01750 = "L-Carnitine",  #no, next to it
+  FT01751 = "L-Carnitine",  #big shoulder left but keep
+  FT01776 = "Nicotine",
+  #FT01777 = "Nicotine",  #no, next to it
+  FT01841 = "Methioninesulfoxide",
+  #FT01845 = "Phenylalanine",  #2 peaks, also in B1
+  #FT01873 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01942 = "1-Methylhistidine",   #no, next to it
+  FT01942 = "3-Methylhistidine",    #small shoulder but keep
+  FT01954 = "Glyceraldehyde 2-phosphate",
+  FT02090 = "N-Acetylornithine",  #flat but good shape in B1
+  FT02093 = "Arginine",
+  #FT02095 = "Arginine",  #no, next to it
+  FT02116 = "Indoleacetic acid",
+  FT02119 = "Citrulline",
+  FT02133 = "Ascorbic Acid",  #ok but low
+  #FT02192 = "Glucosamine",   #higher prob other, less rtdev
+  #FT02193 = "Glucosamine",   #higher prob other, less rtdev
+  FT02194 = "Glucosamine",
+  FT02216 = "Succinylacetone",  #ok but low
+  FT02240 = "Tyrosine",
+  FT02266 = "1-Methyluric acid", #ok but low
+  #FT02285 = "Pyridoxic Acid",  #noise shaped
+  FT02287 = "Phosphorylcholine",
+  FT02288 = "Epinephrine",  #not sure, high mzdev
+  #FT02289 = "Epinephrine", #not sure, high mzdev
+  #FT02378 = "1,5-anhydro D-glucitol", #noise
+  FT02564 = "Caffeine",
+  FT02614 = "Acetylhistidine",
+  #FT02732 = "Glucose",  #isoform same, multiple peaks
+  #FT02732 = "Mannose",  #isoform same, multiple peaks
+  #FT02733 = "Fructose", #flat
+  #FT02733 = "Glucose", #flat
+  #FT02733 = "Mannose", #flat
+  #FT02734 = "Fructose", #flat
+  #FT02734 = "Mannose", #flat
+  #FT02748 = "ADMA",  #isoform same
+  #FT02748 = "SDMA",  #isoform same
+  FT02767 = "Acetylcarnitine",
+  #FT02769 = "Acetylcarnitine", #no next to peak
+  #FT02783 = "Galactitol", #isoform same, also big dev
+  #FT02783 = "Sorbitol",   #isoform same, also big dev
+  #FT02784 = "Galactitol", #isoform same, also big dev
+  #FT02784 = "Sorbitol",   #isoform same, also big dev
+  FT02792 = "Tryptophan",
+  FT02809 = "Indolelactic acid",
+  FT02890 = "L-Kynurenine",  #ok but low
+  FT02934 = "L,L-Cyclo(leucylprolyl)",
+  FT03014 = "Citric Acid", #ok but low
+  #FT03015 = "Citric Acid",
+  FT03102 = "Gluconic Acid",  #ok but low
+  FT03125 = "Pantothenic Acid",  #ok but low
+  FT03180 = "Cystathionine", #ok but low
+  FT03229 = "Sebacic acid",  #ok but low
+  FT03288 = "Carnosine",  #flat
+  FT03407 = "C4 Carnitine",
+  #FT03408 = "C4 Carnitine", #flat
+  FT03589 = "Cystine",
+  #FT03668 = "Acetyl-Glucosamine", #higher prob other, less rtdev
+  FT03669 = "Acetyl-Glucosamine",
+  #FT03699 = "Uridine",  #noise
+  FT03724 = "C5 Carnitine",   #doubt if other molec
+  #FT03725 = "C5 Carnitine",  #flat
+  FT03969 = "Glycero-phosphocholine",
+  FT04213 = "Adenosine",  #ok but low
+  #FT04383 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  #FT04384 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  FT04679 = "8-Oxo-2-Deoxyguanosine",  #isoform same,
+  #FT04679 = "Guanosine",               #isoform same, keep for rt more diff
+  FT04881 = "Inosine",
+  FT05162 = "Sphingosine",
+  FT06922 = "Corticosterone",   #doubt if other molec
+  #FT06923 = "Corticosterone",  #other or shoulder
+  #FT07494 = "alpha-Lactose",   #isoform, multiple peaks
+  #FT07494 = "Sucrose",         #isoform, multiple peaks
+  FT07885 = "Riboflavin",  #partially in noise, ok but low in B1
+  FT07974 = "Sphingosine-1-phosphate",  #ok but low
+  FT08610 = "SAMe",  #partially in noise, ok but low in B1
+  FT08623 = "Palmitoylcarnitine"  #doubt if other molec
+)
+
+print('nr of found features in untargeted metabolimcs, so far:')
+length(to_keep)
+
+```
+
+
+## Inspection MS/MS spectra to DB
+
+For the annotated features which are not included in the targeted metabolomics,
+the following approach is chosen: check the ms/ms spectra in the spicked mixed 
+and in a subset of QCs and samples.
+
+steps:
+
+- load correct mixes needed
+- subset feat table (eg df qc-data above) + filter std features only
+- plot mirror msms sprectra
+- manual inspection
+- to keep and subset the std_features
+
+This was previously done, see repo `lcms-standards`. From the list with possible
+stds, the following were retained as found in our untargeted metabolomics 
+(positive mode checked only). use the `match-standards-serum-mix` Rmd files.
+
+For mixes 12 to 19, this was not (yet) done. see TODO = TBD in table
+T- with mix12 
+
+Added in comments below in which mix std present and at summary which label it has, 
+eg label "A". If multiple adduct are found, we only focus in the adduct that we
+retrieved (using the loaded sdt_info == standards_dilution.txt file) 
+in the For information regarding the qualility labels, repo `lcms-standards`. 
+
+```{r}
+#' manually subset the list to_keep (above with Feat names PP) with this found list
+#' all original are still here, just in comments if bad
+to_keep <- c(
+#  FT00059 = "Trimethylamine", #mix19 TBD
+  #FT00162 = "Putrescine",  #2 peaks
+  FT00198 = "Glycine",   #mix2: A
+  #FT00349 = "Alanine",   #2 peaks
+  #FT00507 = "Dimethylglycine",   #2 peaks
+  #FT00510 = "Choline",  #ugly
+  FT00531 = "Serine",   #mix 7, A 
+  #FT00666 = "Creatinine", #ugly, skipped after corr plot p180; mix 7: C
+  #FT00698 = "Proline",  #2 peaks
+  FT00739 = "Acetylglycine",  #ok but low intens,; mix6: C
+  #FT00741 = "Guanidoacetic acid",  #2p + low I
+  #FT00743 = "Betaine", #flat signal
+  #FT00743 = "Valine", #flat signal
+  #FT00745 = "Betaine", # multiple peaks
+  #FT00745 = "Valine", # multiple peaks
+  FT00769 = "Threonine",  #mix5: B 
+  FT00796 = "Phenylethylamine",  #mix4: A
+  #FT00797 = "Phenylethylamine",  #noise
+  #FT00799 = "Phenylethylamine", #noise
+  FT00812 = "Niacinamide", #ok but low; mix3: A
+  #FT00814 = "Niacinamide",  #noise
+  FT00888 = "Taurine", #mix7: A
+#  FT00904 = "3-Hydroxybutyric Acid",  #mix6: Inconclusive
+  FT00949 = "5-Oxoproline",  #partially in noise, good in B1; mix3: A
+  #FT00955 = "Pipecolic acid",  # multiple peaks
+#  FT00979 = "Ketoleucine",  #mix12: TBD
+  FT01007 = "Hydroxyproline",  #mix2: A
+  #FT01008 = "Acetylalanine",  # multiple peaks
+  #FT01008 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01009 = "Acetylalanine",  # multiple peaks
+  #FT01009 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01010 = "Creatine",   #2 peaks
+  #FT01013 = "Isoleucine",  #good but indisrim to Leu, skip
+  #FT01013 = "Leucine",     #good but indisrim to Ile, skip
+  #FT01014 = "Isoleucine",   #2nd option but same issue
+  #FT01014 = "Leucine",      #2nd option but same issue
+  FT01028 = "Asparagine",  #mix6: A
+  FT01036 = "Ornithine",  #2 peaks; mix8: B
+  FT01049 = "L-Aspartic Acid",  #mix10: A
+  FT01106 = "Hypoxanthine",  #in noise/noise, good in B1; mix2: A
+  #FT01165 = "Salicylic acid", #not found in enough samples, other compound
+  FT01252 = "Phosphorylethanolamine", #mix10: C
+#  FT01300 = "Tryptamine",  #mix12: TBD
+#  FT01366 = "Phenylpyruvic acid", #mix7: Inconclusive
+  #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
+  FT01370 = "Glutamine",   #2 peaks; mix4: B
+  #FT01372 = "Glutamine",  #flat signal
+  FT01379 = "Lysine",  #higher prob other, less rtdev; mix11: A
+  #FT01380 = "Lysine",  #2 peaks
+  FT01398 = "N-Acetylserine",  #ok but low; mix9: D
+  FT01399 = "L-Glutamic Acid", #mix1: A
+  FT01440 = "Methionine",  #mix7: B
+  FT01491 = "Guanine",   #ok but low; mix3: A
+  FT01514 = "Xanthine",  #ok but low; mix1: B
+  #FT01605 = "Histidine",  #yes but also next to it, drifts incl in B1
+  #FT01607 = "Histidine",  #no, next to it
+#  FT01688 = "Threonic Acid",  #partially in noise, good in B1; mix7: Inconclusive
+#  FT01705 = "Serotonin",      #partially in noise, good in B1; mix14: TBD
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal
+  #FT01750 = "L-Carnitine",  #no, next to it
+  FT01751 = "L-Carnitine",  #big shoulder left but keep; mix11: A
+#  FT01776 = "Nicotine",  #mix17: TBD
+  #FT01777 = "Nicotine",  #no, next to it
+  FT01841 = "Methioninesulfoxide",  #mix6: C
+  #FT01845 = "Phenylalanine",  #2 peaks, also in B1
+  #FT01873 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01942 = "1-Methylhistidine",   #no, next to it
+  FT01942 = "3-Methylhistidine",    #small shoulder but keep; mix7: A
+  FT01954 = "Glyceraldehyde 2-phosphate",  #mix14: TBD
+  FT02090 = "N-Acetylornithine",  #flat but good shape in B1; mix10: B
+  FT02093 = "Arginine",  #mix6: A
+  #FT02095 = "Arginine",  #no, next to it
+#  FT02116 = "Indoleacetic acid",  #mix13: TBD
+  FT02119 = "Citrulline",  #mix3: A
+  FT02133 = "Ascorbic Acid",  #ok but low; mix2: C
+  #FT02192 = "Glucosamine",   #higher prob other, less rtdev
+  #FT02193 = "Glucosamine",   #higher prob other, less rtdev
+  FT02194 = "Glucosamine",  #mix10: A
+#  FT02216 = "Succinylacetone",  #ok but low; mix17: TBD
+  FT02240 = "Tyrosine",  #mix8: B
+  FT02266 = "1-Methyluric acid", #ok but low; mix7: B
+  #FT02285 = "Pyridoxic Acid",  #noise shaped
+#  FT02287 = "Phosphorylcholine",  #mix13: TBD
+#  FT02288 = "Epinephrine",  #not sure, high mzdev; mix17: TBD
+  #FT02289 = "Epinephrine", #not sure, high mzdev
+  #FT02378 = "1,5-anhydro D-glucitol", #noise
+  FT02564 = "Caffeine",  #mix7: A
+  FT02614 = "Acetylhistidine",  #mix1: A
+  #FT02732 = "Glucose",  #isoform same, multiple peaks
+  #FT02732 = "Mannose",  #isoform same, multiple peaks
+  #FT02733 = "Fructose", #flat
+  #FT02733 = "Glucose", #flat
+  #FT02733 = "Mannose", #flat
+  #FT02734 = "Fructose", #flat
+  #FT02734 = "Mannose", #flat
+  #FT02748 = "ADMA",  #isoform same
+  #FT02748 = "SDMA",  #isoform same
+#  FT02767 = "Acetylcarnitine",  #mix14: TBD
+  #FT02769 = "Acetylcarnitine", #no next to peak
+  #FT02783 = "Galactitol", #isoform same, also big dev
+  #FT02783 = "Sorbitol",   #isoform same, also big dev
+  #FT02784 = "Galactitol", #isoform same, also big dev
+  #FT02784 = "Sorbitol",   #isoform same, also big dev
+  FT02792 = "Tryptophan",  #mix6: A
+#  FT02809 = "Indolelactic acid",  #mix14: TBD
+  FT02890 = "L-Kynurenine",  #ok but low; mix2: A
+  FT02934 = "L,L-Cyclo(leucylprolyl)",  #mix11: A
+#  FT03014 = "Citric Acid", #ok but low  #mix10: Inconclusive. No MS2 spectra available
+  #FT03015 = "Citric Acid",
+#  FT03102 = "Gluconic Acid",  #ok but low; mix17: TBD
+#  FT03125 = "Pantothenic Acid",  #ok but low; mix13: TBD
+  FT03180 = "Cystathionine", #ok but low; mix8: A
+#  FT03229 = "Sebacic acid",  #ok but low; mix12: TBD
+#  FT03288 = "Carnosine",  #flat; mix12: TBD
+  FT03407 = "C4 Carnitine",  #mix2: A
+  #FT03408 = "C4 Carnitine", #flat
+  FT03589 = "Cystine",  #mix6: A
+  #FT03668 = "Acetyl-Glucosamine", #higher prob other, less rtdev
+#  FT03669 = "Acetyl-Glucosamine",  #mix16: TBD
+  #FT03699 = "Uridine",  #noise
+  FT03724 = "C5 Carnitine",   #doubt if other molec
+  #FT03725 = "C5 Carnitine",  #flat
+  FT03969 = "Glycero-phosphocholine",  #mix8: D (no spectra match)
+  FT04213 = "Adenosine",  #ok but low; mix10: B
+  #FT04383 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  #FT04384 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+#  FT04679 = "8-Oxo-2-Deoxyguanosine",  #isoform same, mix13: TBD
+  #FT04679 = "Guanosine",               #isoform same, keep for rt more diff
+  FT04881 = "Inosine",  #mix8: B
+  FT05162 = "Sphingosine",  #mix7: B
+  FT06922 = "Corticosterone",   #doubt if other molec; mix5: A
+  #FT06923 = "Corticosterone",  #other or shoulder
+  #FT07494 = "alpha-Lactose",   #isoform, multiple peaks
+  #FT07494 = "Sucrose",         #isoform, multiple peaks
+  FT07885 = "Riboflavin",  #partially in noise, ok but low in B1; mix4: B
+  FT07974 = "Sphingosine-1-phosphate",  #ok but low; mix6: A
+  FT08610 = "SAMe",  #partially in noise, ok but low in B1; mix4: D
+  FT08623 = "Palmitoylcarnitine"  #doubt if other molec; mix3: A
+)
+
+print('nr of found features in untargeted metabolimcs, so far:')
+length(to_keep)
+
+```
+
+=> recap labels using 3 levels of evidence: 
+
+1. expected m/z, 
+2. difference in measured intensity,
+3. MS2-based annotation.
+
+Based on the available information retention times/features are annotated to
+standards using different confidence levels:
+
+- **D** (lowest confidence): based on evidence 1: signal needs to be
+  higher in samples with higher concentration of the standard. Measured m/z has
+  to match the m/z of an ion of the compound. A visual inspection of the EIC has
+  to be done in addition to ensure high quality of the signal.
+- **C**: based on evidence 1 and 2. In addition to **D**, also the MS2
+  spectrum for that feature needs to match with at least a low similarity to the
+  reference spectra for that compound from HMDB.
+- **B**: same as **C** but similarity to a reference spectrum for the standard
+  is higher than 0.7.
+- **A** (highest confidence): same as **B**, but the experimental MS2 spectrum
+  does not match a MS2 spectrum from any other compound in HMDB or MassBank with
+  a similarity > 0.7. Matches against spectra with a difference in their
+  precursor m/z are not considered.
+
+
+# Final list of annotated features
+
+From the in total `r nrow(featureDefinitions(chris))` features,
+`r length(unique(std_features$feature_id))` could be annotated to at least one 
+of the `r nrow(std_info)` compounds, 
+confirmed by (1) profiling using commercial standards in the same samples, or 
+by (2) comparing MS/MS fragments using spicked standards in the QC pool samples.
+Both approaches are accepted as Tier 1 annotations.
+
+The final list of correctly annotated features are saved for future use.
+
+- print names of final list
+
+```{r, echo = TRUR}
+#' manually subset the list to_keep (above with Feat names PP) with this found list
+#' all original are still here, just in comments if bad
+to_keep <- c(
+#  FT00059 = "Trimethylamine", #mix19 TBD
+  #FT00162 = "Putrescine",  #2 peaks
+  FT00198 = "Glycine",   #mix2: A
+  #FT00349 = "Alanine",   #2 peaks
+  #FT00507 = "Dimethylglycine",   #2 peaks
+  #FT00510 = "Choline",  #ugly
+  FT00531 = "Serine",   #mix 7, A 
+  #FT00666 = "Creatinine", #ugly, mix 7: C
+  #FT00698 = "Proline",  #2 peaks
+  FT00739 = "Acetylglycine",  #ok but low intens,; mix6: C
+  #FT00741 = "Guanidoacetic acid",  #2p + low I
+  #FT00743 = "Betaine", #flat signal
+  #FT00743 = "Valine", #flat signal
+  #FT00745 = "Betaine", # multiple peaks
+  #FT00745 = "Valine", # multiple peaks
+  FT00769 = "Threonine",  #mix5: B 
+  FT00796 = "Phenylethylamine",  #mix4: A
+  #FT00797 = "Phenylethylamine",  #noise
+  #FT00799 = "Phenylethylamine", #noise
+  FT00812 = "Niacinamide", #ok but low; mix3: A
+  #FT00814 = "Niacinamide",  #noise
+  FT00888 = "Taurine", #mix7: A
+#  FT00904 = "3-Hydroxybutyric Acid",  #mix6: Inconclusive
+  FT00949 = "5-Oxoproline",  #partially in noise, good in B1; mix3: A
+  #FT00955 = "Pipecolic acid",  # multiple peaks
+#  FT00979 = "Ketoleucine",  #mix12: TBD
+  FT01007 = "Hydroxyproline",  #mix2: A
+  #FT01008 = "Acetylalanine",  # multiple peaks
+  #FT01008 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01009 = "Acetylalanine",  # multiple peaks
+  #FT01009 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01010 = "Creatine",   #2 peaks
+  #FT01013 = "Isoleucine",  #good but indisrim to Leu, skip
+  #FT01013 = "Leucine",     #good but indisrim to Ile, skip
+  #FT01014 = "Isoleucine",   #2nd option but same issue
+  #FT01014 = "Leucine",      #2nd option but same issue
+  FT01028 = "Asparagine",  #mix6: A
+  FT01036 = "Ornithine",  #2 peaks; mix8: B
+  FT01049 = "L-Aspartic Acid",  #mix10: A
+  FT01106 = "Hypoxanthine",  #in noise/noise, good in B1; mix2: A
+  #FT01165 = "Salicylic acid", #not found in enough samples, other compound
+  FT01252 = "Phosphorylethanolamine", #mix10: C
+#  FT01300 = "Tryptamine",  #mix12: TBD
+#  FT01366 = "Phenylpyruvic acid", #mix7: Inconclusive
+  #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
+  FT01370 = "Glutamine",   #2 peaks; mix4: B
+  #FT01372 = "Glutamine",  #flat signal
+  FT01379 = "Lysine",  #higher prob other, less rtdev; mix11: A
+  #FT01380 = "Lysine",  #2 peaks
+  FT01398 = "N-Acetylserine",  #ok but low; mix9: D
+  FT01399 = "L-Glutamic Acid", #mix1: A
+  FT01440 = "Methionine",  #mix7: B
+  FT01491 = "Guanine",   #ok but low; mix3: A
+  FT01514 = "Xanthine",  #ok but low; mix1: B
+  #FT01605 = "Histidine",  #yes but also next to it, drifts incl in B1
+  #FT01607 = "Histidine",  #no, next to it
+#  FT01688 = "Threonic Acid",  #partially in noise, good in B1; mix7: Inconclusive
+#  FT01705 = "Serotonin",      #partially in noise, good in B1; mix14: TBD
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal
+  #FT01750 = "L-Carnitine",  #no, next to it
+  FT01751 = "L-Carnitine",  #big shoulder left but keep; mix11: A
+#  FT01776 = "Nicotine",  #mix17: TBD
+  #FT01777 = "Nicotine",  #no, next to it
+  FT01841 = "Methioninesulfoxide",  #mix6: C
+  #FT01845 = "Phenylalanine",  #2 peaks, also in B1
+  #FT01873 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01942 = "1-Methylhistidine",   #no, next to it
+  FT01942 = "3-Methylhistidine",    #small shoulder but keep; mix7: A
+#  FT01954 = "Glyceraldehyde 2-phosphate",  #mix14: TBD
+  FT02090 = "N-Acetylornithine",  #flat but good shape in B1; mix10: B
+  FT02093 = "Arginine",  #mix6: A
+  #FT02095 = "Arginine",  #no, next to it
+#  FT02116 = "Indoleacetic acid",  #mix13: TBD
+  FT02119 = "Citrulline",  #mix3: A
+  FT02133 = "Ascorbic Acid",  #ok but low; mix2: C
+  #FT02192 = "Glucosamine",   #higher prob other, less rtdev
+  #FT02193 = "Glucosamine",   #higher prob other, less rtdev
+  FT02194 = "Glucosamine",  #mix10: A
+#  FT02216 = "Succinylacetone",  #ok but low; mix17: TBD
+  FT02240 = "Tyrosine",  #mix8: B
+  FT02266 = "1-Methyluric acid", #ok but low; mix7: B
+  #FT02285 = "Pyridoxic Acid",  #noise shaped
+#  FT02287 = "Phosphorylcholine",  #mix13: TBD
+#  FT02288 = "Epinephrine",  #not sure, high mzdev; mix17: TBD
+  #FT02289 = "Epinephrine", #not sure, high mzdev
+  #FT02378 = "1,5-anhydro D-glucitol", #noise
+  FT02564 = "Caffeine",  #mix7: A
+  FT02614 = "Acetylhistidine",  #mix1: A
+  #FT02732 = "Glucose",  #isoform same, multiple peaks
+  #FT02732 = "Mannose",  #isoform same, multiple peaks
+  #FT02733 = "Fructose", #flat
+  #FT02733 = "Glucose", #flat
+  #FT02733 = "Mannose", #flat
+  #FT02734 = "Fructose", #flat
+  #FT02734 = "Mannose", #flat
+  #FT02748 = "ADMA",  #isoform same
+  #FT02748 = "SDMA",  #isoform same
+#  FT02767 = "Acetylcarnitine",  #mix14: TBD
+  #FT02769 = "Acetylcarnitine", #no next to peak
+  #FT02783 = "Galactitol", #isoform same, also big dev
+  #FT02783 = "Sorbitol",   #isoform same, also big dev
+  #FT02784 = "Galactitol", #isoform same, also big dev
+  #FT02784 = "Sorbitol",   #isoform same, also big dev
+  FT02792 = "Tryptophan",  #mix6: A
+#  FT02809 = "Indolelactic acid",  #mix14: TBD
+  FT02890 = "L-Kynurenine",  #ok but low; mix2: A
+  FT02934 = "L,L-Cyclo(leucylprolyl)",  #mix11: A
+#  FT03014 = "Citric Acid", #ok but low  #mix10: Inconclusive. No MS2 spectra available
+  #FT03015 = "Citric Acid",
+#  FT03102 = "Gluconic Acid",  #ok but low; mix17: TBD
+#  FT03125 = "Pantothenic Acid",  #ok but low; mix13: TBD
+  FT03180 = "Cystathionine", #ok but low; mix8: A
+#  FT03229 = "Sebacic acid",  #ok but low; mix12: TBD
+#  FT03288 = "Carnosine",  #flat; mix12: TBD
+  FT03407 = "C4 Carnitine",  #mix2: A
+  #FT03408 = "C4 Carnitine", #flat
+  FT03589 = "Cystine",  #mix6: A
+  #FT03668 = "Acetyl-Glucosamine", #higher prob other, less rtdev
+#  FT03669 = "Acetyl-Glucosamine",  #mix16: TBD
+  #FT03699 = "Uridine",  #noise
+  FT03724 = "C5 Carnitine",   #doubt if other molec
+  #FT03725 = "C5 Carnitine",  #flat
+  FT03969 = "Glycero-phosphocholine",  #mix8: D (no spectra match)
+  FT04213 = "Adenosine",  #ok but low; mix10: B
+  #FT04383 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  #FT04384 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+#  FT04679 = "8-Oxo-2-Deoxyguanosine",  #isoform same, mix13: TBD
+  #FT04679 = "Guanosine",               #isoform same, keep for rt more diff
+  FT04881 = "Inosine",  #mix8: B
+  FT05162 = "Sphingosine",  #mix7: B
+  FT06922 = "Corticosterone",   #doubt if other molec; mix5: A
+  #FT06923 = "Corticosterone",  #other or shoulder
+  #FT07494 = "alpha-Lactose",   #isoform, multiple peaks
+  #FT07494 = "Sucrose",         #isoform, multiple peaks
+  FT07885 = "Riboflavin",  #partially in noise, ok but low in B1; mix4: B
+  FT07974 = "Sphingosine-1-phosphate",  #ok but low; mix6: A
+  FT08610 = "SAMe",  #partially in noise, ok but low in B1; mix4: D
+  FT08623 = "Palmitoylcarnitine"  #doubt if other molec; mix3: A
+)
+
+print('Final nr of found features in untargeted metabolimcs:')
+length(to_keep)
+
+```
+
+- add quality label information to save below in res_ann.
+
+```{r add-qual-label-msms}
+#' add the labels ABCD as flag to the std_features TODO
+flags <- c(
+# "Trimethylamine" = 'mix19: TBD',
+  #FT00162 = "Putrescine",  #2 peaks
+  "Glycine" = 'mix2: A',
+  #FT00349 = "Alanine",   #2 peaks
+  #FT00507 = "Dimethylglycine",   #2 peaks
+  #FT00510 = "Choline",  #ugly
+  "Serine" = 'mix 7: A', 
+  "Creatinine" = 'mix 7: C',
+  #FT00698 = "Proline",  #2 peaks
+  "Acetylglycine" = 'mix6: C',
+  #FT00741 = "Guanidoacetic acid",  #2p + low I
+  #FT00743 = "Betaine", #flat signal
+  #FT00743 = "Valine", #flat signal
+  #FT00745 = "Betaine", # multiple peaks
+  #FT00745 = "Valine", # multiple peaks
+  "Threonine" = 'mix5: B',
+  "Phenylethylamine" = 'mix4: A',
+  #FT00797 = "Phenylethylamine",  #noise
+  #FT00799 = "Phenylethylamine", #noise
+  "Niacinamide" = 'mix3: A',
+  #FT00814 = "Niacinamide",  #noise
+  "Taurine" = 'mix7: A',
+# "3-Hydroxybutyric Acid" = 'mix6: Inconclusive',
+  "5-Oxoproline" = 'mix3: A',
+  #FT00955 = "Pipecolic acid",  # multiple peaks
+# "Ketoleucine" = 'mix12: TBD',
+  "Hydroxyproline" = 'mix2: A',
+  #FT01008 = "Acetylalanine",  # multiple peaks
+  #FT01008 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01009 = "Acetylalanine",  # multiple peaks
+  #FT01009 = "N-Acetyl-beta-alanine",  # multiple peaks
+  #FT01010 = "Creatine",   #2 peaks
+  #FT01013 = "Isoleucine",  #good but indisrim to Leu, skip
+  #FT01013 = "Leucine",     #good but indisrim to Ile, skip
+  #FT01014 = "Isoleucine",   #2nd option but same issue
+  #FT01014 = "Leucine",      #2nd option but same issue
+  "Asparagine" = 'mix6: A',
+  "Ornithine" = 'mix8: B',
+  "L-Aspartic Acid" = 'mix10: A',
+  "Hypoxanthine" = 'mix2: A',
+  #FT01165 = "Salicylic acid", #not found in enough samples, other compound
+  "Phosphorylethanolamine" = 'mix10: C',
+# "Tryptamine" = 'mix12: TBD',
+# "Phenylpyruvic acid" = 'mix7: Inconclusive',
+  #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
+  "Glutamine" = 'mix4: B',
+  #FT01372 = "Glutamine",  #flat signal
+  "Lysine" = 'mix11: A',
+  #FT01380 = "Lysine",  #2 peaks
+  "N-Acetylserine" = 'mix9: D',
+  "L-Glutamic Acid" = 'mix1: A',
+  "Methionine" = 'mix7: B',
+  "Guanine" = 'mix3: A',
+  "Xanthine" = 'mix1: B',
+  #FT01605 = "Histidine",  #yes but also next to it, drifts incl in B1
+  #FT01607 = "Histidine",  #no, next to it
+# "Threonic Acid" = 'mix7: Inconclusive',
+# "Serotonin" = 'mix14: TBD',
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal 
+  #FT01750 = "L-Carnitine",  #no, next to it 
+  "L-Carnitine" = 'mix11: A',
+# "Nicotine" = 'mix17: TBD',
+  #FT01777 = "Nicotine",  #no, next to it
+  "Methioninesulfoxide" = 'mix6: C',
+  #FT01845 = "Phenylalanine",  #2 peaks, also in B1
+  #FT01873 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01873 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "1-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "3-Methylxanthine",  #isoform same, also in noise
+  #FT01874 = "7-Methylxanthine",  #isoform same, also in noise
+  #FT01942 = "1-Methylhistidine",   #no, next to it
+  "3-Methylhistidine" = 'mix7: A',
+#  "Glyceraldehyde 2-phosphate" = 'mix14: TBD',
+  "N-Acetylornithine" = 'mix10: B',
+  "Arginine" = 'mix6: A',
+  #FT02095 = "Arginine",  #no, next to it
+# "Indoleacetic acid" = 'mix13: TBD',
+  "Citrulline" = 'mix3: A',
+  "Ascorbic Acid" = 'mix2: C',
+  #FT02192 = "Glucosamine",   #higher prob other, less rtdev
+  #FT02193 = "Glucosamine",   #higher prob other, less rtdev
+  "Glucosamine" = 'mix10: A',
+# "Succinylacetone" = 'mix17: TBD',
+  "Tyrosine" = 'mix8: B',
+  "1-Methyluric acid" = 'mix7: B',
+  #FT02285 = "Pyridoxic Acid",  #noise shaped
+# "Phosphorylcholine" = 'mix13: TBD',
+# "Epinephrine" = 'mix17: TBD',
+  #FT02289 = "Epinephrine", #not sure, high mzdev
+  #FT02378 = "1,5-anhydro D-glucitol", #noise
+  "Caffeine" = 'mix7: A',
+  "Acetylhistidine" = 'mix1: A',
+  #FT02732 = "Glucose",  #isoform same, multiple peaks
+  #FT02732 = "Mannose",  #isoform same, multiple peaks
+  #FT02733 = "Fructose", #flat
+  #FT02733 = "Glucose", #flat
+  #FT02733 = "Mannose", #flat
+  #FT02734 = "Fructose", #flat
+  #FT02734 = "Mannose", #flat
+  #FT02748 = "ADMA",  #isoform same
+  #FT02748 = "SDMA",  #isoform same
+# "Acetylcarnitine" = 'mix14: TBD',
+  #FT02769 = "Acetylcarnitine", #no next to peak
+  #FT02783 = "Galactitol", #isoform same, also big dev
+  #FT02783 = "Sorbitol",   #isoform same, also big dev
+  #FT02784 = "Galactitol", #isoform same, also big dev
+  #FT02784 = "Sorbitol",   #isoform same, also big dev
+  "Tryptophan" = 'mix6: A',
+# "Indolelactic acid" = 'mix14: TBD',
+  "L-Kynurenine" = 'mix2: A',
+  "L,L-Cyclo(leucylprolyl)" = 'mix11: A',
+# Citric Acid" = 'mix10: Inconclusive. No MS2 spectra available',
+  #FT03015 = "Citric Acid",
+# "Gluconic Acid" = 'mix17: TBD',
+# "Pantothenic Acid" = 'mix13: TBD',
+  "Cystathionine" = 'mix8: A',
+# "Sebacic acid" = 'mix12: TBD',
+# "Carnosine" = 'mix12: TBD',
+  "C4 Carnitine" = 'mix2: A',
+  #FT03408 = "C4 Carnitine", #flat
+  "Cystine" = 'mix6: A',
+  #FT03668 = "Acetyl-Glucosamine", #higher prob other, less rtdev
+# "Acetyl-Glucosamine" = 'mix16: TBD',
+  #FT03699 = "Uridine",  #noise
+  #FT03725 = "C5 Carnitine" #doubt if other molec
+  #FT03725 = "C5 Carnitine",  #flat
+  "Glycero-phosphocholine" = 'mix8: D (no spectra match)',
+  "Adenosine" = 'mix10: B',
+  #FT04383 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+  #FT04384 = "Acetylneuraminic Acid", #not found in enough samples, other compound
+# "8-Oxo-2-Deoxyguanosine" = 'mix13: TBD',
+  #FT04679 = "Guanosine",               #isoform same, keep for rt more diff
+  "Inosine" = 'mix8: B',
+  "Sphingosine" = 'mix7: B',
+  "Corticosterone" = 'mix5: A',
+  #FT06923 = "Corticosterone",  #other or shoulder
+  #FT07494 = "alpha-Lactose",   #isoform, multiple peaks
+  #FT07494 = "Sucrose",         #isoform, multiple peaks
+  "Riboflavin" = 'mix4: B',
+  "Sphingosine-1-phosphate" = 'mix6: A',
+  "SAMe" = 'mix4: D',
+  "Palmitoylcarnitine" = 'mix3: A'
+)
+
+print('nr flags:')
+length(flags)
+
+```
+
+- subset the summarized experiment object with only the annotated features and add other info like hmdb_id.
+
+```{r subset-res-annotated}
+#' retain only the good found annotations
+std_features <- std_features[rownames(std_features) %in% names(to_keep), ]  
+dim(std_features)
+
+#keep only annotated features
+res_ann <- res[std_features$feature_id, ]
+dim(res_ann)
+
+#add info to summ experiment
+rowData(res_ann) <- std_features
+
+#' add flags
+rowData(res_ann)$flag <- unname(unlist(flags))
+
+```
+
+- save object for future use.
+
+```{r save-res_ann}
+#' save filtered, median scaled and BB_norm MSexperiment, selection only annotated features
+save(res_ann, file = paste0(RDATA_PATH, "SumExp_chris_annotated.RData"))
+res_ann
+
+```
+
+
+# Acknowledgments
+
+Consulted sources used as basis for code:
+
+- plasma_preprocessing_pos.Rmd (repo bidoc_ida_metabolomics)
+- match-standards-introduction.Rmd (repo lcms-standards)
+- match-standards-serum-mix01.Rmd (repo lcms-standards)
+
+
+# Session information
+
+R packages used for the analysis:
+
+```{r}
+sessionInfo()
+
+```
+
+
+# References
+
+
