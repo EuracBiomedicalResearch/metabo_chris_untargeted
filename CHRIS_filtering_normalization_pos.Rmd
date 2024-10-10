@@ -597,9 +597,9 @@ plot(p)
 
 ```
 
-## Fifter if CV <=0.3 of QCs per batches, in min 80% of batches
+## Fifter if CV <=0.3 of QCs per batches, in min 50% of batches
 
-retain per batch if feature <= 0.3, for these keep feature only if in min 80% of
+retain per batch if feature <= 0.3, for these keep feature only if in min 50% of
 batches the case.
 
 ```{r CV_30_filter_batch, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7, eval = TRUE}
