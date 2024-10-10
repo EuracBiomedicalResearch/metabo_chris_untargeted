@@ -63,7 +63,7 @@ filename <- "CHRIS_filtering_normalization_pos"
 
 #' Path to save images to; remove if exists.
 IMAGE_PATH <- paste0("images/", filename, "/")
-dir.create(IMAGE_PATH, recursive = TRUE)
+dir.create(IMAGE_PATH, recursive = TRUE, showWarnings = FALSE)
 
 #' Path to store RData files
 RDATA_PATH <- paste0("data/RData/", filename, "/")
@@ -98,7 +98,7 @@ library(ggplot2)
 ```
 
 
-## functions
+## Functions
 
 ```{r plot-functions}
 #' fast computational PCA score plotting functions
@@ -199,7 +199,7 @@ names(col_batch_id) <- unique(res$batch_id)
 ```
 
 For all calculations, use raw_filled. Never use the imputed values unless
-for PCA plotting, as you incoporate noise as signals and by doing so, add
+for PCA plotting, as you incorporate noise as signals and by doing so, add
 variance.
 
 ```{r before-norm, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
@@ -253,7 +253,7 @@ qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 
 #' calculate the CVs for QCs
 #x <- qc_data[,1]  #test, OK!
-cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
 names(df_with_CV_values) <- c("Metabolite", "CV_values")
 
@@ -276,7 +276,7 @@ for (i in batch_id) {
     rownames(met_data) <- tmp$sample_id
 
     #' calc CVs
-    cv_values <- apply(met_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 
     #' append to df containing the overall CVs from previous block
     df_with_CV_values <- cbind(df_with_CV_values, cv_values)
@@ -342,12 +342,17 @@ head(retained_variables_QCpool)
 
 #' filter met_data with selection
 met_data <- t(assays(res)$raw_filled)  #FINDME
-met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+met_data <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
 print('nr of features left, no NAs:')
-dim(met_data_filtered)
+dim(met_data)
+
+#' Restrict summarizedExp to retained features
+res <- res[retained_variables_QCpool[, 1],]  #res[feats, samples] and can filter using logical/index/names for both TODO
+print('number of features and samples in analysis:')
+dim(res)
 
 
-tmp <- met_data_filtered
+tmp <- met_data
 #tmp[1:10, 1:10]
 
 
@@ -385,11 +390,11 @@ scPCA.variances[1] + scPCA.variances[2]
 
 ## CV stats
 #' keep only pool samples, do above depending filter
-qc_data <- met_data_filtered[grep("POOL_", rownames(met_data_filtered)), ]
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 
 #' calculate the CVs for QCs
 #x <- qc_data[,1]  #test, OK!
-cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
 names(df_with_CV_values) <- c("Metabolite", "CV_values")
 
@@ -405,15 +410,12 @@ batch_id <- unique(res$batch_id)
 #' loop over batches
 for (i in batch_id) {
     #' extract QCs of 1 batch
-    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    tmp <- res[, res$batch_id == i & res$sample_type == 'Pool']
     met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
     rownames(met_data) <- tmp$sample_id
 
-    #' rm features filterad above
-    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]   #80percent QCs presence
-
     #' calc CVs
-    cv_values <- apply(met_data_filtered, 2, function(x) sd(x)/mean(x)) #iter col=feats
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 
     #' append to df containing the overall CVs from previous block
     df_with_CV_values <- cbind(df_with_CV_values, cv_values)
@@ -432,6 +434,9 @@ col <- 'gray65'
 p <- plot_multiboxplot(df)
 plot(p)
 
+
+
+
 ```
 
 All features are kept, as there there is a singal >0 for each pool sample in
@@ -439,11 +444,15 @@ each. this is result fron gap filling ('raw_filled_imputed'). No, also th case
 with 'raw' feature table.
 
 
-# 3. Filter if CV>1.0 of QCs
+# 3. Filter using CV of QCs
 
-Delete variables with coeficent of variation of QCs > 1.0 of pool samples.
+## Filter if CV <=1 of QCs over all batches (SKIP)
 
-```{r CV_30_filter2, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+Delete variables with coefficient of variation of QCs <= 1.0 of pool samples.
+
+=> NO, do other strategy, with eval per batch.
+
+```{r CV_30_filter2, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7, eval = FALSE}
 #' transpose data, matrix metabolomics as cols
 met_data <- t(assays(res)$raw_filled)                        #FIND_ME!!!
 rownames(met_data) <- res$sample_id
@@ -455,7 +464,7 @@ qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 qc_data[1:10, 1:10]
 
 #' Delete variables with coeficent of variation of QCs > 30%
-CV_values <- apply(qc_data, 2, function(x) sd(x)/mean(x))
+CV_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE))
 
 #' testing
 #sd(qc_data[,1]) #FT00001 NA
@@ -487,12 +496,22 @@ retained_variables_CV <- matrix_with_CV_values[(matrix_with_CV_values[,2] <= 1.0
 
 
 #' filter in addition to the previous filter (80percent)
-met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
-met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]
+#met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+met_data <- met_data[, colnames(met_data) %in% retained_variables_CV[, 1]]
 print('nr of features left, no NAs:')
-dim(met_data_filtered2)
+dim(met_data)
 
-tmp <- met_data_filtered2
+#' rm the ones (if not using na.rm = T)
+#retained_variables_CV2 <- retained_variables_CV[!is.na(retained_variables_CV[, 1]),]
+#rownames(retained_variables_CV2)
+
+#' Restrict summarizedExp to retained features
+res <- res[rownames(retained_variables_CV),]  #res[feats, samples] and can filter using logical/index/names for both TODO
+print('number of features and samples in analysis:')
+dim(res)
+
+
+tmp <- met_data
 #tmp[1:10, 1:10]
 
 
@@ -530,11 +549,11 @@ scPCA.variances[1] + scPCA.variances[2]
 
 ## CV stats
 #' keep only pool samples, do above depending filter
-qc_data <- met_data_filtered2[grep("POOL_", rownames(met_data_filtered2)), ]
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 
 #' calculate the CVs for QCs
 #x <- qc_data[,1]  #test, OK!
-cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
 names(df_with_CV_values) <- c("Metabolite", "CV_values")
 
@@ -554,12 +573,8 @@ for (i in batch_id) {
     met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
     rownames(met_data) <- tmp$sample_id
 
-    #' rm features filtered above
-    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]   #80percent QCs presence
-    met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
-
     #' calc CVs
-    cv_values <- apply(met_data_filtered2, 2, function(x) sd(x)/mean(x)) #iter col=feats
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 
     #' append to df containing the overall CVs from previous block
     df_with_CV_values <- cbind(df_with_CV_values, cv_values)
@@ -578,25 +593,235 @@ col <- 'gray65'
 p <- plot_multiboxplot(df)
 plot(p)
 
+
+
 ```
 
+## Fifter if CV <=0.3 of QCs per batches, in min 80% of batches
+
+retain per batch if feature <= 0.3, for these keep feature only if in min 80% of
+batches the case.
+
+```{r CV_30_filter_batch, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7, eval = TRUE}
+#' transpose data, matrix metabolomics as cols
+met_data <- t(assays(res)$raw_filled)                        #FIND_ME!!!
+rownames(met_data) <- res$sample_id
+#met_data[1:10,1:10]
+#dim(met_data)
+
+#' filter from above, done in res
+#met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]   #80percent QCs presence
+
+#' keep only pool samples
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+qc_data[1:10, 1:10]
+
+#' calculate the CVs for QCs overall
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+#' calculate CV of QC per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[, res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$raw_filled)             #FIND_ME!!!
+    rownames(met_data) <- tmp$sample_id
+
+    #' calc CVs
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -c(Metabolite, CV_values))
+df_with_CV_values <- as.data.frame(df_with_CV_values)
+
+
+#df_with_CV_values <- df_with_CV_values[1:30,1:30]
+
+#trick to count correct nr of CV<=0.3
+#df_with_CV_values[is.na(df_with_CV_values)] <- 9999
+
+#count nr of batches which have cv <= 0.3 (TRUE), percentage on total TURE among nr batches
+df_with_CV_values$cv0.3_per_batch_percentage <- apply(df_with_CV_values, 1, function(x) (sum((x <= 0.3), na.rm = TRUE)) / length(x) ) #iter over row = feats
+retained_variables_CVbatch <- df_with_CV_values[df_with_CV_values$cv0.3_per_batch_percentage >= 0.5,]
+nrow(retained_variables_CVbatch)
+
+print('distribution of cv0.3_per_batch_percentage:')
+summary(df_with_CV_values$cv0.3_per_batch_percentage)
+#max is in 95 qc samples under 0.3
+
+#filter using 80& distribution of across batches, so no issues NAs
+#df_with_CV_values$quant80 <- apply(X = df_with_CV_values, 1, function(x) quantile(x, na.rm = TRUE, 0.8) )  #row iter!, saved as col
+#print('distribution of quant80:')
+#summary(df_with_CV_values$quant80)
+#retained_variables_CVbatch <- df_with_CV_values[!is.na(df_with_CV_values$quant80),]
+#retained_variables_CVbatch <- retained_variables_CVbatch[retained_variables_CVbatch$quant80 <= 0.5,]
+
+#' rm features filtered above
+met_data <- t(assays(res)$raw_filled)
+met_data <- met_data[, colnames(met_data) %in% rownames(retained_variables_CVbatch)]      #0.3 CV QC cutoff per batch, 50% cases True
+dim(met_data)
+
+
+## Results
+#with quant80 and cutoff 0.3 = 933 var left
+#quant50 cutoff 0.3 = 4540
+#quant 80 cutoff 0.5 = 6273
+
+#80% in per batch <=0.3 = 582 left
+#75% in batch <=0.3 = 908
+#50% in batch <=0.3 = 3641
+#50% in batch <=0.3 = 3820 (with na.rm=T)
+
+#' Restrict summarizedExp to retained features
+res <- res[rownames(retained_variables_CVbatch),]  #res[feats, samples] and can filter using logical/index/names for both TODO
+print('number of features and samples in analysis:')
+dim(res)
+
+
+tmp <- met_data
+#tmp[1:10, 1:10]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$norm)             #median scaled
+    rownames(met_data) <- tmp$sample_id
+
+    #' rm features filterad above, done in res
+    #met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+    #met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% rownames(retained_variables_CVbatch)]      #0.3 CV QC cutoff per batch, 80% cases True
+
+    #' calc CVs
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+
+
+```
+
+## Results
+
+with quant80 and cutoff 0.3 = 933 var left
+quant50 cutoff 0.3 = 4540
+quant 80 cutoff 0.5 = 6273
+
+80% in per batch <=0.3 = 582 left
+75% in batch <=0.3 = 908
+50% in batch <=0.3 = 3641
+
+50% in batch <=0.3 = 3820 (with na.rm=T)
 
 # 4. Between sample - median scaling
 
 The median scaling was previously performed in the `CHRIS_normalisation_pos.Rmd`
-experiment, according to the workflow followed for the NAFLD study. Here, the
-corresponding msexperiment assay `norm` was loaded.
+experiment, according to the workflow followed for the NAFLD study.
 
-```{r median-scaling2, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+```{r median-scaling}
+#' Compute median and generate normalization factor
+mdns <- apply(assay(res, "raw_filled"), MARGIN = 2,
+              median, na.rm = TRUE )
+nf_mdn <- mdns / median(mdns)
+
+#' divide dataset by median of median and create a new assay.
+assays(res)$norm <- sweep(assay(res, "raw_filled"), MARGIN = 2, nf_mdn, '/')
+assays(res)$norm_imputed <- sweep(assay(res, "raw_filled_imputed"), MARGIN = 2,
+                                  nf_mdn, '/')
+
+```
+
+Here, the corresponding msexperiment assay `norm` was used to evaluate improvement.
+
+```{r eval-median-scaling, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
 #' filter met_data with selection
 met_data <- t(assays(res)$norm)    #the median scaled MSexperiment
 dim(met_data)
-met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
-dim(met_data_filtered)
-met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
-dim(met_data_filtered2)
 
-tmp <- met_data_filtered2
+tmp <- met_data
 #tmp[1:10, 1:100]
 
 
@@ -634,11 +859,11 @@ scPCA.variances[1] + scPCA.variances[2]
 
 ## CV stats
 #' keep only pool samples, do above depending filter
-qc_data <- met_data_filtered2[grep("POOL_", rownames(met_data_filtered2)), ]
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 
 #' calculate the CVs for QCs
 #x <- qc_data[,1]  #test, OK!
-cv_values <- apply(qc_data, 2, function(x) sd(x)/mean(x)) #iter col=feats
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
 names(df_with_CV_values) <- c("Metabolite", "CV_values")
 
@@ -658,12 +883,168 @@ for (i in batch_id) {
     met_data <- t(assays(tmp)$norm)             #median scaled
     rownames(met_data) <- tmp$sample_id
 
-    #' rm features filterad above
-    met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
-    met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
+    #' calc CVs
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+
+    #' append to df containing the overall CVs from previous block
+    df_with_CV_values <- cbind(df_with_CV_values, cv_values)
+    colnames(df_with_CV_values)[ncol(df_with_CV_values)] <- i
+}
+
+#' rm the overal CV values
+df_with_CV_values <- subset(df_with_CV_values, select = -CV_values)
+
+#' prep format df for boxplot
+df <- melt(df_with_CV_values)
+#head(df)
+
+#' boxplot
+col <- 'gray65'
+p <- plot_multiboxplot(df)
+plot(p)
+
+```
+
+
+# 5. Between batches normalization
+
+Eliminate batch-specific effects by considering abundance differences in QC
+samples across various batches. Ensure that for each feature, the QC values are
+consistent and normalize accordingly. This approach is beneficial for datasets
+measured over extended periods or diverse locations.
+
+```{r lm-bb, fig.path = IMAGE_PATH}
+#' Define a function to calculate the correlation per batches
+#test for one batch
+pool_index <- res$sample_type == "Pool"
+res_qc <- res[, pool_index]
+batch_id <- unique(res_qc$batch_id)
+
+## fit linear model on QC samples
+qc_lm <- fit_lm(y ~ batch_id,
+            data = data.frame(batch_id = res_qc$batch_id),
+            y = log2(assay(res_qc, "norm")),
+            minVals = 50) ## 80% detection rate
+
+# Need to remove features that have less than 5 non-missing values in one batch
+pool_index <- res$sample_type == "Pool"
+res_qc <- res[, pool_index]
+batch_id <- unique(res_qc$batch_id)
+vec_remove <- integer(0)
+
+for (i in batch_id) {
+    tmp_qc <- res_qc[,res_qc$batch_id == i]
+    tmp_flag <- apply(assay(tmp_qc, "norm_wb"), MARGIN = 1, function(row){sum(!is.na(row)) < 5})
+    tmp_flag <- which(tmp_flag)
+    vec_remove <- c(vec_remove, tmp_flag)
+}
+
+# get unique features
+vec_remove <- unique(vec_remove)
+
+# replace by NA
+qc_lm[vec_remove] <- NA
+
+## get summary
+qc_lm_summary <- lapply(qc_lm, function(z) {
+    if (length(z) > 1) {
+    s <- summary(z)
+    c(slope = coefficients(s)[2, "Estimate"],
+      p.value = coefficients(s)[2, 4],
+      adj.r.squared = s$adj.r.squared)
+    } else c(slope = NA_real_, F = NA_real_,
+         adj.r.squared = NA_real_)
+    }) |> do.call(what = rbind)
+head(qc_lm_summary)
+
+## adjust
+vals_adj <- adjust_lm(log2(assay(res, "norm")), 
+                      data = data.frame(batch_id = res$batch_id), 
+                      lm = qc_lm)
+vals_adj <- 2^vals_adj
+
+##create new assay
+assay(res, "norm_bb") <- vals_adj
+
+```
+
+`norm_bb` normalization was performed and saved in the res Summarized experiment.
+we load it here, was performed after the MS and within-batches normalisations.
+
+```{r between-batches, fig.path = IMAGE_PATH, fig.height = 5, fig.width = 7}
+#' filter met_data with selection
+met_data <- t(assays(res)$norm_bb)    #the between batches MSexperiment
+dim(met_data)
+#met_data_filtered <- met_data[, colnames(met_data) %in% retained_variables_QCpool[, 1]]
+#dim(met_data_filtered)
+#met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% retained_variables_CV[, 1]]      #1.0 CV QC cutof
+#met_data_filtered2 <- met_data_filtered[, colnames(met_data_filtered) %in% rownames(retained_variables_CVbatch)]      #0.3 CV QC cutoff per batch, 50% cases True
+#dim(met_data_filtered2)
+
+tmp <- met_data
+#tmp[1:10, 1:100]
+
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+vals <- log2(tmp) |>
+    scale(center = TRUE, scale = TRUE)
+vals[is.na(vals)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(vals, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+plot(p)
+
+#' plot batches
+p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+plot(p)
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA <- svd(vals)
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+scPCA.variances[1] + scPCA.variances[2]
+
+
+## CV stats
+#' keep only pool samples, do above depending filter
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+
+#' calculate the CVs for QCs
+#x <- qc_data[,1]  #test, OK!
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+summary(df_with_CV_values$CV_values)
+
+
+## CV stats per batch - boxplot
+#' calculate CV of QC2 per batch
+batch_id <- unique(res$batch_id)
+#i <- "BATCH0001" #test
+
+#' loop over batches
+for (i in batch_id) {
+    #' extract QCs of 1 batch
+    tmp <- res[,res$batch_id == i & res$sample_type == 'Pool']
+    met_data <- t(assays(tmp)$norm)             #median scaled
+    rownames(met_data) <- tmp$sample_id
 
     #' calc CVs
-    cv_values <- apply(met_data_filtered2, 2, function(x) sd(x)/mean(x)) #iter col=feats
+    cv_values <- apply(met_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
 
     #' append to df containing the overall CVs from previous block
     df_with_CV_values <- cbind(df_with_CV_values, cv_values)
@@ -687,32 +1068,24 @@ plot(p)
 
 # Write final feature table
 
-FINDME!!! how to save this into the res object, if less features present?  The
-`met_data` and `SM` dataframe with QCs present are saved for MVA outside this R
-markdown report.
+The `res` SummarisedExperiment and the `met_data` dataframe with QCs present are
+saved for MVA outside this R markdown report.
 
 ```{r save met_data}
+met_data <- t(assays(res)$norm_bb)    #the median scaled AND BB norm MSexperiment
+dim(met_data)
+
+#' save filtered, median scaled AND BB-norm MSexperiment
+save(res, file = paste0(RDATA_PATH, "SumExp_chris_filtered_norm.RData"))
+
 #' save for below and in the other experiments
-save(met_data_filtered2, file = paste0(RDATA_PATH, "met_data_filtered_norm.RData"))
+save(met_data, file = paste0(RDATA_PATH, "met_data_filtered_norm.RData"))
 
 #' save SM df
 handle <- file.path(DATA_PATH, 'CHRIS_filtered_norm_VM.txt')
-write.table(met_data_filtered, file=handle, sep ="\t", row.names = TRUE, col.names = TRUE)
+write.table(met_data, file=handle, sep ="\t", row.names = TRUE, col.names = TRUE)
 
 ```
-
-
-# Evaluate using CV of QC pool values
-
-See consecutive effect on the CV of pooled QCs, and number of remaining features
-in the analysis, per step.
-
-normalization strategy  |  mean    |  features remain
-_____________________________________________________
-raw_filled + blank rm   |  1.0480  |  19401
-" + ft80pool filter     |  1.0480  |  18603
-" + 1.0CVpool filter    |  0.7982  |  2599
-" + median scaling      |  0.8073  |  2599
 
 
 # Acknowledgments
