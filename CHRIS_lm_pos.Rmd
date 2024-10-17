@@ -1,0 +1,1027 @@
+---
+title: "Exploratory analysis of CHRIS baseline untargeted metabolomics (pos)"
+author: "Marilyn De Graeve, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-09-24"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+**Modified**: `r file.info("CHRIS_lm_pos.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, echo = FALSE, results = "hide", message = FALSE}
+#' rmarkdown format settings
+library("BiocStyle")
+library("kableExtra")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, time_it = TRUE)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+BiocStyle::markdown()
+
+```
+
+# Introduction
+
+In this document, exploratory statistical analyis (linear models) are performed
+on the untargeted metabolomics data from the CHRIS study (baseline).
+
+# Setup
+
+## Directories
+
+```{r directories}
+#' General settings
+filename <- "CHRIS_lm_pos"
+
+#' Path to save images
+IMAGE_PATH <- paste0("images/", filename, "/")
+dir.create(IMAGE_PATH, recursive = TRUE)
+
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to the data
+DATA_PATH <- "data"
+SDATA_PATH <- '/home/mdegraeve/Documents/Files/Work_Eurac/Data/CHRIS' #FINDME!
+
+```
+
+## Packages
+
+```{r packages, message = FALSE}
+library(chrisData)
+library(chrisUtils)
+library(DT)
+library(ggfortify)
+library(ggplot2)
+library(pander)
+library(pheatmap)
+library(plotly)
+library(RColorBrewer)
+library(reshape2)
+library(SummarizedExperiment)
+library(tidyfr)
+library(vioplot)
+
+```
+
+## functions
+
+```{r functions}
+#' Impute missing values using uniform distribution
+na_unidis <- function(z) {
+    na <- is.na(z)
+    if (any(na)) {
+        min = min(z, na.rm = TRUE)
+        z[na] <- runif(sum(na), min = min/2, max = min)
+    }
+    z
+}
+
+PLOTLY <- TRUE
+ggplotly_or_not <- function(x, interactive = TRUE) {
+    if (interactive) ggplotly(x)
+    else print(x)
+}
+myPalette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+
+```
+
+```{r plot-functions}
+#' fast computational PCA score plotting functions
+#' https://ggplot2.tidyverse.org/reference/scale_shape.html
+shapes <- c(21, 24, 22, 23) #, 16, 17, 15, 18, 1, 2, 0, 5, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 19, 20) #25 available, pick coloreble ones
+shapes <- rep(shapes,100)
+
+theme_customgridbox<- function () {
+  theme(legend.position = "right",
+  legend.title = element_text(face="bold",size=18),
+  legend.text = element_text(size=18),
+  legend.key = element_rect(fill=NA),
+  axis.title = element_text(size=16),
+  axis.text = element_text(size=16,colour="black"),
+  axis.ticks = element_line(colour = "black"),
+  plot.title = element_text(face="bold",size=18,hjust=0.5),
+  panel.background = element_rect(fill=NA),
+  panel.grid.major = element_line(colour="grey80"),
+  panel.border = element_rect(fill=NA,size=1))
+}
+plot_pca <- function(scores, comp, col_palette) {
+  ggplot(data = scores, aes(x = PC1, y = PC2), label = rownames(scores)) +
+      geom_hline(yintercept = 0, colour = "gray65") +
+      geom_vline(xintercept = 0, colour = "gray65") +
+      geom_point(aes(fill = comp, shape = comp), color = 'black', size = 1) +
+	    theme_customgridbox() +
+      ggtitle("PCA score plot") +
+      scale_shape_manual(values = shapes) +
+      scale_color_discrete(col_palette) +
+      guides(colour ='none', fill = 'none', shape = 'none')
+}
+plot_multiboxplot <- function(df) {
+  ggplot(df, aes(x = variable, y = value, fill = col)) +
+      geom_boxplot() +
+      #geom_jitter(alpha = 0.5, color= "gray65", height = 0, width = 0.3, size = 0.1) +
+      labs(title = "",
+           y = "CV distribution of QC",
+           x = "Batch") +
+      scale_color_manual(col) +
+      theme_customgridbox() +
+      theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 7),
+            legend.position="none")
+}
+
+#' testing
+#scores <- as.data.frame(pca_res$x)
+#comp <- as.factor(res$sample_type)
+#length(comp)
+#col_palette <- col_phenotype
+
+
+```
+
+
+# Data import
+
+## Load untargeted metabolomics
+
+The data from the untargeted metaboliteswere loaded from an Rdata object, containing a SummarizedExperiment.
+This object contained all applied normalizations, created in the ‘CHRIS_filtering_normalisation_pos.Rmd’ workflow.
+
+```{r load Rdata}
+#' Load preprocessing results
+#load(file.path(SDATA_PATH, "met_data_filtered_norm.RData")) #met_data_filtered2 is df
+
+load(file.path(SDATA_PATH, "SumExp_chris_filtered_norm.RData")) #res is object with 3820*8100s
+
+```
+
+Replace filenames with AIDs and create a met_ann df for the lm below.
+
+```{r load_dataset, message = FALSE}
+#dim(met_data_filtered2)
+#met_data <- met_data_filtered2  #metab as cols
+#met_data <- met_data[1:10, 1:30]
+
+#' load the feat table
+met_data <- t(assays(res)$norm_bb)    #the median scaled AND BB norm MSexperiment
+dim(met_data)
+
+#' no tdff, do this instead
+#met_ann <- t(met_data) #feats as rows
+met_ann <- data.frame(matrix(vector(mode = 'numeric',length = ncol(met_data*2)), nrow = ncol(met_data), ncol = 2))
+rownames(met_ann) <- colnames(met_data)
+#colnames(met_ann) <- colData(res)$sample_id
+#dim(met_ann)
+#met_ann[1:10,1:2]
+
+#' define the columns with metabolite concentrations
+metabolites <- colnames(met_data)
+
+#' Row-wise impute missing values and add the data as a new assay = NO!
+#tmp <- apply(met_data, MARGIN = 1, na_unidis)
+#met_data <- t(tmp)
+
+#' checks
+#head(met_data)    #row samples, cols are metab name, matrix are absol conc
+print('nr of  metabolites included:')
+ncol(met_data)
+#print('included metabolites are:')
+#colnames(met_data)
+dim(met_data) #ok!
+#rownames(met_data)[1:10]
+
+#' change rownames to AIDs instead of filename .mzML
+#colData(res)
+rownames(met_data) <- colData(res)$sample_id
+met_data[1:10,1:10] #bio and pool
+
+```
+
+
+# Calculate CV of QC pool samples
+
+To estimate performance of normalization comparing CV of CHRIS POOL samples
+before and after normalization, we calculate the CV of CHRIS POOL samples before
+normalization on each feature of the whole dataset.  As the first QC samples had
+all NA values for each metabolite, these were discarded from the
+calculation. other NAs were imputed (na_unidis).
+
+
+```{r calculate CV pool before norm, message = FALSE, warning = FALSE}
+#met_data[1:10,1:10]
+#met_data[60:80,1:10] #2 QCs with only NAs for all metabolites, discard for calc, rest via imputation
+
+#' keep only pool samples
+qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
+#qc_data <- qc_data[3:nrow(qc_data), metabolites]
+#dim(qc_data) #910#
+#rownames(qc_data)
+#qc_data[1:15,1:10]
+
+#' Row-wise impute missing values and add the data as a new assay
+#tmp <- apply(qc_data, MARGIN = 1, na_unidis)
+#qc_data <- t(tmp)
+
+#' calculate the CVs for QCs
+cv_values <- apply(qc_data, 2, function(x) sd(x, na.rm = TRUE)/mean(x, na.rm = TRUE)) #iter col=feats
+df_with_CV_values <- data.frame(x=colnames(qc_data), y=cv_values)
+names(df_with_CV_values) <- c("Metabolite", "CV_values")
+
+#' median and mean CV of all the metabolites
+#median(df_with_CV_values$CV_values)
+#mean(df_with_CV_values$CV_values)
+summary(df_with_CV_values$CV_values)
+
+#' add to met_ann collumn for use
+met_ann[metabolites, 'cv_qc_chris'] <- df_with_CV_values[metabolites, 'CV_values']
+#dim(met_ann)
+
+```
+
+
+# Data subsetting
+
+Before proceeding with the data analysis we remove the QC (QC Level 1, QC Level
+2, QC Level 3, CHRIS_POOL) samples. In addition we restrict to samples from the
+OBESITY study using code '001'.
+
+```{r subset set, message = FALSE, warning = FALSE}
+met_data <- met_data[grep("^001", rownames(met_data)), ]
+
+print('number of participants and metabolites:')
+dim(met_data)
+#lost more than -910 QC samples??? 8100 bia and qc -> bio chris + NAFLD samples left FINDME, keep/not?
+
+```
+
+In addition, a list of dropout AIDs were recieved (update 2023-01-13) to
+doublecheck if present and remove if needed too. No additional entries needed to
+be removed.
+
+```{r subset dropout participant}
+#' remove following AIDs from dropout list
+lst <- c('0010073885',  #2016-03-03	2021-04-00	active drop out	1
+         '0010232706',	#2015-12-15	2023-01-13	active drop out	2
+         '0110232705',	#2023-01-13	active drop out	2
+         '0140232700',	#2023-01-13	active drop out	2
+         '0010009431',	#2013-04-09	2023-01-13	deceased with death disposition for data destruction	2
+         '0010039135',	#2013-01-29	2023-01-13	deceased with death disposition for data destruction	2
+         '0010067290',	#2015-01-30	2023-01-13	deceased with death disposition for data destruction	2
+         '0010089195',	#2013-08-23	2023-01-13	deceased with death disposition for data destruction	2
+         '0010095901',	#2017-01-11	2023-01-13	deceased with death disposition for data destruction	2
+         '0010119369',	#2012-06-20	2023-01-13	deceased with death disposition for data destruction	2
+         '0010122658',	#2012-01-31	2023-01-13	deceased with death disposition for data destruction	2
+         '0010143908',	#2018-10-04	2023-01-13	deceased with death disposition for data destruction	2
+         '0010166706',	#2011-10-20	2023-01-13	deceased with death disposition for data destruction	2
+         '0080166702',	#2016-12-01	2023-01-13	deceased with death disposition for data destruction	2
+         '0010186814',	#2016-09-20	2023-01-13	deceased with death disposition for data destruction	2
+         '0010203933',	#2012-03-20	2023-01-13	deceased with death disposition for data destruction	2
+         '0010233530',	#2012-05-22	2023-01-13	deceased with death disposition for data destruction	2
+         '0010237554',	#2017-08-10	2023-01-13	deceased with death disposition for data destruction	2
+         '0010238879',	#2015-10-14	2023-01-13	deceased with death disposition for data destruction	2
+         '0140238872',	#2020-07-21	2023-01-13	deceased with death disposition for data destruction	2
+         '0010261526')  #2013-09-30	2023-01-13	deceased with death disposition for data destruction	2
+met_data <- met_data[!(rownames(met_data) %in% lst),]
+
+print('number of participants and metabolites:')
+dim(met_data)
+
+```
+
+The `met_data` object without QCs present are saved and ready to be used for
+subsequent PCA and lm analyses below.
+
+```{r save met_data bio}
+#' save for below and in the other experiments
+save(met_data, file = paste0(RDATA_PATH, "met_data_bio.RData"))
+
+```
+
+
+# Add phenotype data
+
+## Sex, Age, BMI
+
+Add other metadata (Sex, Age, BMI), needed as covariates in the lm models.
+
+Data packages (*chrisData* and *chrisUtils*) are not publicly
+available. Any such data access needs to got through a *CHRIS Access Committee*
+request.
+
+```{r load_metadata, message = FALSE}
+#' age, sex in general information
+chris_general <- chrisData("general_information")
+#colnames(chris_general)
+rownames(chris_general) <- chris_general$AID
+#rownames(chris_general)[1:10]
+#chris_general$AID[1:10]
+#nrow(chris_general)
+#head(chris_general)
+
+#' add covariates for lm
+tmp <- NULL
+tmp$AID <- rownames(met_data)
+tmp$Age <- chris_general[rownames(met_data), "x0_age"]
+tmp$Sex <- chris_general[rownames(met_data), "x0_sex"]
+tmp <- as.data.frame(tmp)
+rownames(tmp) <- rownames(met_data)
+#tmp$Sex <- factor(tmp$Sex, levels = c('Female', 'Male'))
+#tmp[1:10,]
+
+#' BMI in clinical data
+clin <- chrisData("clinical")
+rownames(clin) <- clin$AID
+
+#' Adding this information to the colData
+tmp$BMI <- clin[rownames(met_data), "x0an03q"]
+
+#' add to met_data
+met_data <- cbind(met_data, tmp)
+
+#' check BMI distribution
+summary(met_data$BMI)
+
+#' tests
+#met_data$Age[1:10]
+#met_data$Sex[1:10]
+#met_data$BMI[1:10]
+#colnames(met_data)
+
+```
+
+For two participants, I have no gender for, i.e. '<NA>'.
+
+## Age/10
+
+Create additional variable for age per 10y, because coefficients and effect
+sizes correspond to one year difference, and the anual difference is
+neglectible. Dividing age with 10, difference in coefficents and effect sizes
+would correspond to 10 years difference and it would be easier to define
+meaningful cut-off.
+
+```{r define-age10-variable, message = FALSE}
+#' define age per 10y group
+met_data$Age_10 <- met_data$Age / 10
+
+```
+
+
+# Data transformation
+
+The loaded data contains the samples as rows, and the metabolite names as
+colums. The measurements of the `met_data` object are the absolute
+concentrations of metabolite per sample, in natural scale.
+
+To ensure a normal distribution of the metabololites, we perform log2
+transformation.
+
+```{r log2-transformation, message = FALSE}
+#' log2 scaling of absolute abundances metabolites
+met_data[, metabolites] <- log2(met_data[, metabolites])
+
+```
+
+
+# Evaluation of the various variables in the data set
+
+Overview of variable evaluation in the data set, prior to the lm regression:
+
+- Violin plot of BMI by sex.
+- Violin plot of BMI by age.
+- Violin plot of age by sex.
+
+
+## BMI - gender distribution of data
+
+Evaluating the distribution of the BMI according to gender.
+
+```{r violin_bmi, FIGviolin_bmi, fig.path = IMAGE_PATH, fig.height=8, fig.width=7}
+vioplot(split(met_data$BMI,
+              met_data$Sex),
+        xlab = "Sex", ylab = "BMI",
+        main = "BMI distribution by sex")
+
+```
+
+
+## BMI - age distribution of data
+
+Evaluating the distribution of the BMI according to age.
+
+```{r violin age vs bmi, FIGviolin_age_bmi, fig.path = IMAGE_PATH, fig.height=8, fig.width=7}
+#violin age vs bmi
+vioplot(split(met_data$Age,
+              met_data$BMI),
+        xlab = "BMI", ylab = "Age",
+        main = "BMI versus Age")
+
+#binned plot for visualbility
+met_data$BMI_bin <- round(met_data$BMI, 0)
+summary(met_data$BMI_bin)
+
+#violin age vs bmi_bin
+vioplot(split(met_data$Age,
+              met_data$BMI_bin),
+        xlab = "BMI_bin", ylab = "Age",
+        main = "BMI_bin versus Age")
+
+```
+
+## Age - gender distribution of data
+
+Evaluating the distribution of the gender according to age.
+
+```{r violin_age, FIGviolin_age, fig.path = IMAGE_PATH, fig.height=8, fig.width=7}
+vioplot(met_data$Age ~ met_data$Sex,
+        xlab = "", ylab = "Age",
+        main = "Age distribution by sex and overal diet health status",
+        method = "jitter")
+
+```
+
+
+# PCAs
+
+Check samples and batches distribution accross PCA in the previous experiment
+`CHRIS_obesity_tdff.Rmd`. Here, the PCAs are shown per sample metadata.
+
+PCA score plot of the study participants, collored by:
+
+- BMI,
+- Age,
+- Sex
+
+Prior the PCA, data is imputed (na_unidis) and normalized to 0 mean and standard
+deviation of 1 (autoscaling).
+
+```{r imputation-fast-pca, fig.path = IMAGE_PATH, fig.height=5, fig.width=7}
+#' Row-wise impute missing values and add the data as a new assay
+#tmp <- apply(met_data[, metabolites], MARGIN = 1, na_unidis)
+#met_data[, metabolites] <- t(tmp)
+
+#summary(met_data[, metabolites])
+#min(met_data[,metabolites]) #Nas
+#colnames(met_data)
+
+#met_data <- data.frame(sapply(met_data, function(x) ifelse(is.nan(x), NA, x)))
+#met_data <- met_data[,which(unlist(lapply(met_data, function(x)!all(is.na(x)))))]
+
+tmp <- met_data[,metabolites]
+#tmp <- tmp[1:10, 1:10]
+
+## PCAs
+#' scale, impute
+#' NA -> zero ipv imputation
+tmp[is.na(tmp)] <- 0
+
+#' pca calc, phenotype
+pca_res <- prcomp(tmp, scale = FALSE, center = FALSE)
+pca_res$sample_type <- as.factor(res$sample_type)
+pca_res$batch_id <- as.factor(res$batch_id)
+
+#' Define colors for the groups.
+#' Sample type
+#col_phenotype <- brewer.pal(5, "Accent")[c(1, 5)]
+col_phenotype <- brewer.pal(5, "Accent")[c(1, 2)]
+names(col_phenotype) <- c("Study", "Pool")
+
+#' Batches
+#' Define a unique color for each batch.
+col_batch_id <- rainbow(length(unique(res$batch_id)))
+names(col_batch_id) <- unique(res$batch_id)
+
+#' plot ugly
+plot(pca_res$x[,1:2], col = pca_res$sample_type)
+
+#' plot sample type
+#p <- plot_pca(as.data.frame(pca_res$x), pca_res$sample_type, col_phenotype)
+#plot(p)
+
+#' plot batches
+#p <- plot_pca(as.data.frame(pca_res$x), pca_res$batch_id, col_batch_id)
+#plot(p)
+
+```
+
+PCAs.
+
+```{r pcas, Fig_pca, fig.path = IMAGE_PATH, fig.height=5, fig.width=7}
+#' scaling and PCA
+scaledData <- scale(tmp[, metabolites], scale = TRUE)
+#scPCA <- svd(scaledData)
+
+scPCA <- svd(tmp[, metabolites])
+scPCA.scores <- scPCA$u %*% diag(scPCA$d)    ## scores
+scPCA.loadings <- scPCA$v                    ## loadings
+rownames(scPCA.loadings) <- metabolites
+scPCA.variances <- round(100*((scPCA$d^2) / sum(scPCA$d^2)), 1)[1:10]
+
+#' variance explained PCs
+print('variance explained for PC1 + PC2:')
+scPCA.variances[1] + scPCA.variances[2]
+
+#' plot with col BMI
+BMI <- met_data$BMI
+gg_1 <- autoplot(prcomp(scaledData), data = met_data) +
+    geom_point(aes(colour = BMI), size = (BMI/10)) +
+    scale_colour_gradientn(colours = myPalette(100)) +
+    theme_bw()
+ggplotly_or_not(gg_1, PLOTLY)
+
+#' plot with col Age
+Age <- met_data$Age
+gg_1 <- autoplot(prcomp(scaledData), data = met_data) +
+    geom_point(aes(colour = Age), size = (Age/25)) +
+    scale_colour_gradientn(colours = myPalette(100)) +
+    theme_bw()
+ggplotly_or_not(gg_1, PLOTLY)
+
+#' plot with col Sex
+Sex <- met_data$Sex
+gg_1 <- autoplot(prcomp(scaledData), data = met_data) +
+    geom_point(aes(colour = Sex)) +
+    scale_color_manual(name = Sex, values = c('lightblue', 'pink')) +
+    theme_bw()
+gg_1
+#ggplotly_or_not(gg_1, PLOTLY)
+
+#' plot with loading
+gg_1 <- autoplot(prcomp(scaledData), data = met_data,
+                 loadings = TRUE, loadings.colour = 'gray',
+                 loadings.label = TRUE, loadings.label.size = 3,
+                 loadings.label.colour ="darkblue", colour = NA) +
+    geom_point(color = 'gray', size = 0.1) +
+    theme_bw()
+ggplotly_or_not(gg_1, PLOTLY)
+
+```
+
+
+# Linear model to evaluate BMI
+
+```{r define_target}
+TARGET <- 'BMI'
+print(TARGET)
+
+```
+
+To identify metabolites related with `r TARGET`, seperate linear regression
+models are fitted for all metabolites separately (as a response) with BMI, sex,
+age as a covariates.
+
+Model coefficients and p-values are provided. Raw p-values are adjusted for
+multiple hypothesis testing with the method from Benjamini & Hochberg.
+
+```{r linear model, message=FALSE}
+#' Define a function to fit the linear model:
+#' - fit the linear model
+#' - extract the coefficients and p-values skipping the intercept
+#' - return the result as a one-row matrix, columns being coefficients
+#'   and p-values
+funForLinReg <- function(analyte, data) {
+    y <- data[, analyte]
+    data <- data[, c("Sex", "Age_10", TARGET)]
+    res <- coef(summary(lm(y ~ ., data = data)))[-1, ]
+    pvals <- matrix(c(res[, 1L], res[, 4L]), nrow = 1)
+    rownames(pvals) <- analyte
+    colnames(pvals) <- c(paste0("coef_", rownames(res)),
+                         paste0("p-value_", rownames(res)))
+    pvals
+}
+
+#' tests
+#met_data[1:5, c("Sex", "Age", TARGET)]
+#met_data[1:5, metabolites[1]]
+#data <- met_data
+#analyte <- metabolites[1]
+#funForLinReg(analyte, met_data)
+#analyte <- metabolites[71]
+                                        #funForLinReg(analyte, met_data)
+#ata <- met_data[,613:ncol(met_data)]
+#lm_output <- lapply(metabolites, FUN = funForLinReg, data = data             ) |>
+#   do.call(what = rbind)
+
+
+
+#' Fit linear models and extract coefficients and p-values on each metabolite
+lm_output <- lapply(metabolites, FUN = funForLinReg, data = met_data) |>
+    do.call(what = rbind)
+
+#' Adjust p-values for multiple hypothesis testing
+adjp <- apply(lm_output[, grep("p-value", colnames(lm_output))],
+              MARGIN = 2, p.adjust, method = "BH")
+colnames(adjp) <- sub("value", "adj", colnames(adjp))
+lm_output <- cbind(lm_output, adjp)
+
+```
+
+Next we calculate the effect sizes.
+
+To obtain comparable coefficients, prior to linear modelling all the metabolites
+are standardized to zero mean and unit variance (note that this does not
+influence the linear models since they are affine equivariant). In such
+autoscaled data, difference of 1 corresponds to a standard deviation of 1. This
+parameter will be called "effect size" and will be use to evaluate group
+differences.
+
+```{r effectsize w BMI, message=FALSE}
+#' Perform autoscaling for effect size (es) calculation
+met_data_scaled <- met_data
+met_data_scaled[, metabolites] <- met_data[, metabolites] |>
+    as.matrix() |>
+    scale(scale = TRUE)
+
+#' fit linear models and extract the coefficients
+es <- lapply(metabolites, FUN = funForLinReg, data = met_data_scaled) |>
+    do.call(what = rbind)
+es <- es[, grep("coef", colnames(es))]
+colnames(es) <- sub("coef", "effectSize", colnames(es))
+lm_output <- cbind(lm_output, es)
+#head(lm_output)
+
+```
+
+To call a metabolites *significant* we consider, in addition to the
+*statistical* significance levels also the magnitude of its coefficient,
+relative to the coefficient of variation (CV) for that metabolite. The CV,
+calculated on study-internal QC samples (pools of all samples) are a measure of
+the technical noise specific for that metabolite in the present data set. Thus,
+with this method we prioritize metabolites with a larger difference between the
+observed (biological) difference and the (separately estimated) technical variance.
+
+Below we add thus evaluate for each metabolite and comparison whether it
+fulfills that criteria.
+
+```{r define significance criteria w BMI}
+#' define the different coefficients as comparisons
+comps <- colnames(lm_output)[grep("coef", colnames(lm_output))]
+
+#' define which metabolites are considered statistically significant
+sign_p <- lm_output[, grep("p-adj", colnames(lm_output))] < 0.05
+colnames(sign_p) <- sub("p-adj_", "significant_", colnames(sign_p))
+#colSums(sign_p)
+
+#' Convert the (absolute) difference in abundance into a difference in
+#' percentage based on a (log2) coefficient.
+diff_percentage <- function(x) {
+    (2^abs(x) - 1) * 100
+}
+diff_perc <- apply(lm_output[, comps], MARGIN = 2, diff_percentage)
+colnames(diff_perc) <- sub("coef", "diff_perc", colnames(diff_perc))
+
+#' Define for which metabolites the difference in concentration is larger
+#' than a certain proportion of the CV
+cv_cut <- lapply(comps, function(z) {
+    z <- sub("coef_", "", z)
+    diff_perc[, paste0("diff_perc_", z)] > 10 *  #after eval, set to 10
+        met_ann[metabolites, "cv_qc_chris"]
+}) |>
+    do.call(what = cbind)
+colnames(cv_cut) <- sub("coef_", "cv_cut_", comps)
+
+#' Use statistical significance for non-categorical traits instead of bool
+sign_cv <- sign_p & cv_cut
+sign_cv[, "significant_Age_10"] <- sign_p[, "significant_Age_10"]
+
+#' Combine with result from linear model converting to a data.frame to
+#' avoid logicals being converted to numeric
+lm_output <- data.frame(lm_output, sign_cv)
+
+```
+
+The number of metabolites called significant or with an adjusted p-value smaller
+than 0.05 for each of the extracted coefficients are shown below. For a complete
+comparison, the number of metabolites complying to either the adjusted p value
+or either the CV-value, as single threshold criteria, are calculated and
+summarized here as well.
+
+```{r table-sig-mets w BMI, results = "asis"}
+#' merge to p-adj to cv significance summary
+sig_tab <- data.frame(
+    `p_adj < 0.05` = colSums(sign_p),
+    `cv thresh` = colSums(cv_cut),
+    significant = colSums(lm_output[, sub("coef_", "significant_", comps)]),
+    check.names = FALSE)
+
+pandoc.table(
+    sig_tab, style = "rmarkdown",
+    caption = paste0("Number of significant metabolites per tested covariate. ",
+                     " *p_adj < 0.05*: number of statistically significant",
+                     " metabolites.",
+                     " *cv*: number of metabolites with percentage abundance",
+                     " difference above the CV-based threshold.",
+                     " *significant*: number of metabolites that fulfill ",
+                     "the CV-based criteria in addition to the p-adj. threshold"))
+
+```
+
+Export results for inspection:
+
+```{r export-results w BMI}
+results <- data.frame(
+    met_ann[rownames(lm_output), ], #all col from met_ann keep (2 empty too)
+    lm_output,
+    diff_perc
+)
+
+#colnames(results)
+#colnames(lm_output)
+
+#' write to file for manual inspection,
+#' inclusing inspection of the CV-value of each metabolite
+#handle <- file.path(DATA_PATH, 'lm_output_results_metab.txt')
+#write.table(results, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+```
+
+We visualize the associations in a heatmap. The effect size are added for the
+associations, for the significant metabolites (min 1 significance to
+covariate). also for the not significant associations, the effect size is shown.
+
+```{r heatmap w BMI, fig.width = 14, fig.height = 14, fig.cap = "Associations between covariates. Shown are the effect size for the associations, for metabolites with at least one significant association."}
+#' Extract effect sizes
+es_results <- results[, grep("effectSize_", colnames(results))] |>
+    as.matrix()
+
+#' Restrict to those significant for at least one of the groups (sex, age, TARGET, PCs)
+sig_results <- results[, grep("significant_", colnames(results))] |>
+    as.matrix()
+es_results <- es_results[rowSums(sig_results) > 0, ]
+print('nr of metabolites with >= 1 significant association:')
+nrow(es_results)
+
+#' hierarchical clustering
+clust1 <- hclust(dist((es_results)), method = "ward.D")
+clust2 <- hclust(dist(t(es_results)), method = "ward.D")
+
+#' clean roundup nrs for plot
+es_results[es_results == 0] <- NA
+es_results <- round(es_results, 2)
+
+#' info regarding TARGET
+#print(paste0('nr of metabolites with a not-zero effect size in the ', TARGET, ':')
+#sum(es_results[, paste0('effectSize_', TARGET)] != 0)
+
+#' in long format
+es_results_long <- melt(as.matrix(es_results))
+
+#' ggplot
+plt <- es_results_long |>
+    ggplot(aes(Var2, Var1, fill = value, label = value)) +
+    geom_tile() +
+    labs(x = NULL, y = NULL, fill = "Effect Size") +
+    scale_fill_gradient2(mid = "#FBFEF9", low = "#0C6291", high = "#A63446") +
+    geom_text(size = 2.5) +
+    theme_classic() +
+    scale_x_discrete(
+        expand = c(0, 0), limits = colnames(es_results)[clust2$order]) +
+    scale_y_discrete(
+        expand = c(0, 0), limits = rownames(es_results)[clust1$order]) +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1, size = 10),
+          axis.text.y = element_text(hjust = 1, size = 8),
+          plot.margin = margin(t = 5, l = 45, r = 5, b = 5),
+          legend.position = TARGET)
+
+ggsave(paste0(IMAGE_PATH, "metabolite_SLDtypes_effect_sizes.png"),
+       plot = plt, dpi = 600, width = 12,
+       height = 12, units = "cm", scale = 2.5)
+plt
+
+```
+
+In second plot, only the significant effect size labels were added to the
+heat map. also, the dendograms after hierarchical clustering are shown.
+
+```{r heatmap2 w BMI, fig.width = 14, fig.height = 14, fig.cap = "Associations between covariates. Shown are the effect size for the associations, for significant associations the value of the effect size is shown."}
+#' keep just the effect sizes of the significant associations
+es_results_sig <- es_results
+es_results_sig[as.matrix(sig_results)[rownames(es_results), ] == 0] <- ""
+
+#' info regarding TARGET (check=ok)
+print(paste0('nr of significant metabolites in ', TARGET, ':'))
+sum(es_results_sig[, paste0('effectSize_', TARGET)] != "")
+
+#' plot
+colnames(es_results) <- sub("effectSize_", "", colnames(es_results))
+pheatmap(es_results, display_numbers = es_results_sig,
+         number_color = "#444444", fontsize_number = 7)
+
+```
+
+We investigate the associations for the `r TARGET`, i.e. the difference in average
+concentrations between participants of the particular food/indices score. We show the
+results for that coefficient using a volcano plot, coloring significant
+associations in red.
+
+```{r volcano w BMI, FIG-volcano-TARGET, fig.path = IMAGE_PATH, fig.width = 8, fig.height = 8, fig.cap = "Volcano plot for the liver stiffness. Red colored points are those with an adjusted p-value smaller than 0.05."}
+plot_volcano <- function(x, comparison = character(), ...) {
+    X <- x[, paste0("coef_", comparison)]
+    Y <- x[, paste0("p.adj_", comparison)]
+    Y[Y == 0] <- min(Y > 0) / 10
+    plot(X, -log10(Y), pch = 21,
+         col = "#000000ce", bg = "#00000060",
+         xlab = "coefficient", ylab = expression(-log[10](p[adjusted])),
+         ...)
+}
+significant_points <- function(x, comparison = character(),
+                               diff_perc = 2, col = "#E41A1CCE",
+                               bg = "#E41A1C40", ...) {
+    s <- x[, paste0("significant_", comparison)]
+    X <- x[, paste0("coef_", comparison)]
+    Y <- x[, paste0("p.adj_", comparison)]
+    Y[Y == 0] <- min(Y > 0) / 10
+    if (any(s))
+        points(X[s], -log10(Y[s]), col = col, bg = bg, pch = 21)
+}
+#colnames(results)
+plot_volcano(results, TARGET, main = TARGET)
+grid()
+abline(h = -log10(0.05), lty = 1, col = "grey")
+significant_points(results, comparison = TARGET)
+
+```
+
+The (static) table with the significant metabolites is shown below:
+
+```{r table-sig-sex w BMI, results = "asis", echo = FALSE}
+significant_table <- function(x, comparison = character(),
+                              columns = "cv_qc_chris") {
+    sigs <- x[, paste0("significant_", comparison)]
+    columns <- c(columns, paste0(c("coef_", "p.adj_", "effectSize_"),
+                                 comparison))
+    tmp <- x[sigs, columns]
+    tmp <- tmp[order(tmp[, paste0("p.adj_", comparison)]), ]
+    colnames(tmp) <- sub(paste0("_", comparison), "", colnames(tmp))
+    tmp
+}
+sig_tab <- significant_table(results, comparison = TARGET)
+
+pandoc.table(
+    sig_tab, style = "rmarkdown", split.table = Inf,
+    caption = paste0("Metabolites with significant differences in ",
+                     "concentrations ", TARGET, " scores of participants."))
+
+```
+
+The full results table is shown below.
+
+```{r table-top-20 w BMI, results = "asis"}
+##
+oorder <- results[order(results[, paste0("p.adj_", TARGET)]), ]
+
+pandoc.table(oorder[1:5, c(1, 4, 7, 10, 13, 17)], style = "rmarkdown",
+             split.table = Inf, caption = "Top 5 metabolites for type dietary healthy")
+
+datatable(results) |>
+    formatRound(grep("coef|p.value|p.adj|effect", colnames(results)),
+                digits = 6)
+
+```
+
+There are `r nrow(sig_tab)` significantly associated metabolites for `r TARGET`.
+
+Top 5 metabolites adjusted for the covariates (also if not significant) are
+visualized in boxplot in next figures. Points are colored according to sample
+sex, and their size is dependent on the BMI.
+
+```{r prep_box_plots, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+#' prep for plotting
+PLOTLY <- TRUE
+ggplotly_or_not <- function(x, interactive = TRUE) {
+    if (interactive) ggplotly(x)
+    else print(x)
+}
+myPalette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+
+box_plot <- function(data, aes, analyte) {
+    ggplot(data, aes) +
+        geom_jitter(position = position_jitter(0.24),
+                    aes(colour = Sex, alpha = 0.5 , size = (BMI/10))) +
+        geom_violin(trim = FALSE, aes(alpha = 0.5)) +
+        stat_summary(fun = median, geom = "point", shape = 23, size = 2) +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8),
+              axis.title.y = element_blank()) + labs(title = analyte) +
+        theme_bw ()
+}
+
+#' for boxplot func to work automatically
+tmp_colnr <- which(colnames(met_data) == TARGET)
+met_data$tmp_target <- met_data[, tmp_colnr]
+
+```
+
+```{r box11, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+top_analyte <- oorder[1, 1]
+s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
+                analyte = TARGET)
+ggplotly_or_not(s_1, PLOTLY)
+
+```
+
+```{r box12, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+top_analyte <- oorder[2, 1]
+s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
+                analyte = TARGET)
+ggplotly_or_not(s_1, PLOTLY)
+```
+
+```{r box13, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+top_analyte <- oorder[3, 1]
+s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
+                analyte = TARGET)
+ggplotly_or_not(s_1, PLOTLY)
+```
+
+```{r box14, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+top_analyte <- oorder[4, 1]
+s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
+                analyte = TARGET)
+ggplotly_or_not(s_1, PLOTLY)
+```
+
+```{r box15, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
+top_analyte <- oorder[5, 1]
+s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
+                analyte = TARGET)
+ggplotly_or_not(s_1, PLOTLY)
+```
+
+
+# Export data as TDFF
+
+Both the raw and normalized values are saved in TDFF format. Before exporting,
+we append an incremental number to the names of QC samples to have unique sample
+names in the final data set.
+
+```{r}
+sn <- res$sample_name[res$sample_type != "Sample"]
+colData(res)$sample_name[res$sample_type != "Sample"] <-
+                      paste0(sn, "_", seq_along(sn))
+colnames(res) <- res$sample_name
+
+```
+
+## Export normalized data
+
+Export the normalized data as a TDFF module.
+
+```{r, eval = TRUE}
+#' export as tdff with "norm_bb" assayNames
+export_tdf(
+    name = "metabolomics_norm_bb",
+    description = paste0("Untargeted metabolomics data based on the ",
+                         "HILIC LC-MS method measured ",
+                         "in serum samples of baseline CHRIS participants. ",
+                         "These are normalized intensities. "),
+    version = "1.0.0.2",
+    date = "2024-10-10",
+    path = '.',           #do not change path
+    data = data(res, assayNames = "norm_bb", labelPrefix = "x0ptx"),
+    labels = labels(res, assayNames = "norm_bb",
+                    labelPrefix = "x0ptx"))
+
+```
+
+
+
+
+# Acknowlegments
+
+The repositories this experiment is based on:
+
+- CHRIS_obesity_tdff.Rmd
+- NAFLD_metab_targeted_lm.Rmd
+- CHRIS_KORA_tmetab_lm_binary.Rmd
+- CHRIS_KORA_tmetab_lm_individuals.Rmd
+
+
+# Session information
+
+```{r}
+sessionInfo()
+
+```
