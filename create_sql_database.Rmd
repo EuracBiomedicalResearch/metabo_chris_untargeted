@@ -1,0 +1,98 @@
+# Creating the CHRIS untargeted LC-MS database(s)
+
+In this document we define and create the *sqlite* database(s) with the full MS
+data of the CHRIS untargeted metabolomics data. We create separate databases for
+each polarity.
+
+```{r}
+library(readxl)
+library(RSQLite)
+library(MsBackendSql)
+library(MsExperiment)
+library(BiocParallel)
+register(MulticoreParam(), 8L)
+
+MZML_PATH <- "/var/run/media/jo/extdata/data/mzML"
+
+
+```
+
+Read the sample information.
+
+```{r}
+sd <- read_xlsx("data/chris_hilic_files.xlsx") |> as.data.frame()
+```
+
+## Positive polarity
+
+Create a *MsBackendSQL* database with the full MS data.
+
+```{r}
+pos <- sd[sd$polarity == "POS", ]
+fls <- file.path(MZML_PATH, pos$path, pos$file_name)
+sqlite_db <- "data/chris_hilic_pos_1.0.0.3.sqlite"
+con <- dbConnect(SQLite(), sqlite_db)
+createMsBackendSqlDatabase(con, fls, MsBackendMzR(), chunksize = 16)
+dbDisconnect(con)
+```
+
+Create a `MsExperiment` object *representing* the full CHRIS metabolomics
+experiment.
+
+```{r}
+sps <- Spectra(sqlite_db, source = MsBackendOfflineSql(), drv = SQLite())
+sps$file_name <- basename(dataOrigin(sps))
+mse <- MsExperiment(spectra = sps, sampleData = pos)
+mse <- linkSampleData(mse, with = "sampleData.file_name = spectra.file_name")
+```
+
+Store the sample information into the database.
+
+```{r}
+dbWriteSampleData(mse)
+```
+
+To load all data from the database.
+
+```{r}
+mse2 <- MsExperiment(
+    spectra = Spectra(sqlite_db, source = MsBackendOfflineSql(),
+                      drv = SQLite()))
+```
+
+## Negative polarity
+
+Create a *MsBackendSQL* database with the full MS data.
+
+```{r}
+neg <- sd[sd$polarity == "NEG", ]
+fls <- file.path(MZML_PATH, neg$path, neg$file_name)
+sqlite_db <- "data/chris_hilic_neg_1.0.0.3.sqlite"
+con <- dbConnect(SQLite(), sqlite_db)
+createMsBackendSqlDatabase(con, fls, MsBackendMzR(), chunksize = 16)
+dbDisconnect(con)
+```
+
+Create a `MsExperiment` object *representing* the full CHRIS metabolomics
+experiment.
+
+```{r}
+sps <- Spectra(sqlite_db, source = MsBackendOfflineSql(), drv = SQLite())
+sps$file_name <- basename(dataOrigin(sps))
+mse <- MsExperiment(spectra = sps, sampleData = neg)
+mse <- linkSampleData(mse, with = "sampleData.file_name = spectra.file_name")
+```
+
+Store the sample information into the database.
+
+```{r}
+dbWriteSampleData(mse)
+```
+
+To load all data from the database.
+
+```{r}
+mse2 <- MsExperiment(
+    spectra = Spectra(sqlite_db, source = MsBackendOfflineSql(),
+                      drv = SQLite()))
+```
