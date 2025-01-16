@@ -1,0 +1,229 @@
+---
+title: "CHRIS_remove_dropouts_PP"
+author: "Marilyn De Graeve, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2025-01-15"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+bibliography: references.bib
+---
+
+**Modified**: `r file.info("CHRIS_remove_dropouts_PP.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r style, message = FALSE, echo = FALSE, warning = FALSE, results = "asis"}
+library("BiocStyle")
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, dev = "png",
+               dpi = 300)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+
+```
+
+# Introduction
+
+During this workflow, we aim to identify analytes (semi targeted) co-aqcuired
+with the untargeted metabolomics data of the Cooperative Health Research in
+South Tirol (CHRIS) study. For a description of the study, methods used for the
+collection, handling and aqcuisition of the liquid chromatography-mass
+spectrometry (LC-MS) samples, please see [@verri_hernandes_age_2022].  Samples
+are acquired in both positive and negative ionization mode, for which the
+pre-processing of the positive (pos) mode is performed and discussed in the
+Rmarkdown document `CHRIS_preprocessing_pos.Rmd`.  The (feature) filtering and
+normalization of the positive (pos) mode is discussed in the Rmarkdown document
+`CHRIS_filtering_normalization_pos.Rmd`.  The semi-targeted annotation of the
+untargeted metabolomics feature matrix is discussed in the Rmarkdown document
+`CHRIS_semi_targeted_annotation`.
+
+From January 2025, from after pre-processing, CHRIS study participant need to be
+removed.  The removal of these participant is done in this script. After this,
+the `CHRIS_filtering_normalization_pos.Rmd` and
+`CHRIS_semi_targeted_annotation.Rmd` scripts will be rerun. After optimization
+of the CHRIS PP (without loading everything in memory), the
+`CHRIS_preprocessing_pos.Rmd` script will be rerun as well with the updated
+sqlite database (01/2025).
+
+More information regarding the **destruction of CHRIS participant data and
+samples**:
+
+All participants in the CHRIS study have the right to request destruction of
+their data and samples at any time. In addition, they can indicate that their
+data and samples should be destroyed after their death. Triggered by an active
+request from a CHRIS participant, we have updated the list of CHRIS participants
+that dropped out from the study and asked for destruction of their data and
+samples.  If you are using CHRIS data and/or samples in your research, you must
+immediately destroy all individual level data and samples associated with any of
+the above AIDs.  This includes individual level data and samples that you have
+received to perform the research activities, but also all individual level data
+or samples that you have derived or generated in the process. Previously
+generated non-individual level results (for example, regression coefficients
+from models run using individual level data) can be kept without modifications.
+
+
+# Setup
+
+## Directories
+
+```{r directories, echo = FALSE}
+#' General settings
+filename <- "CHRIS_remove_dropouts_PP"
+
+#' Path to store RData files
+RDATA_PATH <- paste0("data/RData/", filename, "/")
+dir.create(RDATA_PATH, recursive = TRUE, showWarnings = FALSE)
+
+#' Path to the data
+DATA_PATH <- "data"
+
+```
+
+## Packages
+
+```{r packages, message = FALSE, echo = FALSE}
+library(chrisUtils)
+library(chrisData)
+library(MsExperiment)
+library(RSQLite)
+library(xcms)
+library(Spectra)
+library(pander)
+library(reshape2)
+library(MetaboAnnotation)
+library(MetaboCoreUtils)
+library(MsBackendSql)
+library(SummarizedExperiment)
+
+```
+
+
+# Load data
+
+Files loaded are the 4 Rdata files created in the `CHRIS_preprocessing_pos.Rmd` script.
+Run the code first for the blanks, change the comments and run for the non-blanks
+(biological samples and QCs).
+
+XcmsExperiment objects:
+!CANNOT be loaded because need connection to the database file! SKIP
+
+```{r load xcms experiment, eval = FALSE}
+#' load xcmsexperment
+load(file.path(DATA_PATH, "blank_chris.RData")) #blank_sample is xcmsexp object
+blank_sample
+
+#load(file.path(DATA_PATH, "samples_chris.RData")) #chris is xcmsexp object, BIG!
+#chris
+
+```
+
+SummarizedExperiment objects:
+
+```{r load Rdata}
+#' Load preprocessing results
+load(file.path(DATA_PATH, "SumExp_chris_blank.RData")) #res_blank is object
+res_blank
+
+#load(file.path(DATA_PATH, "SumExp_chris.RData")) #res is object, BIG!
+#res
+
+```
+
+
+# Change name of sqlite db in the SummarizedExperiment object
+
+Jo: the name of the database (version <01/2025) was
+"res@spectra@backend@dbname...".  The database name is defined in the
+MsBackendOfflineSql backend object, which is in the @backend slot of the Spectra
+object, which itself is in the @spectra slot of the MsExperiment (or rather
+XcmsExperiment) object res.
+
+res is Summarizedexperiment, object needed (chris, XcmsExperiment) CANNOT be
+loaded.
+
+```{r change_db_name}
+blank_sample@spectra@backend@dbname  #nok, no acces xcms obj
+
+```
+
+
+# Remove dropouts
+
+TODO
+
+```{r}
+
+```
+
+
+# Data export
+
+The data is saved after preprocessing, both as Rdata objects, as well as a
+summarized experiment. The data is ready to use for normalization and
+(multivariate) statistics.
+
+## Save samples and blank Rdata
+
+Separate blanks from other samples and save as Rdata files.
+
+```{r sep blanks and bio samples}
+blank_index <- sampleData(chris)$sample_type == "Blank"
+blank_sample <- chris[blank_index, keepAdjustedRtime = TRUE,
+                      keepFeatures = TRUE]
+
+#sample_index <- sampleData(chris)$sample_type != "Blank"
+#chris <- chris[!blank_index, keepAdjustedRtime = TRUE,
+#               keepFeatures = TRUE]
+
+save(blank_sample, file = paste0(RDATA_PATH, "blank_chris.RData"))
+#save(chris, file = paste0(RDATA_PATH, "samples_chris.RData"))
+
+```
+
+## Save Summarized experiment
+
+```{r SummarizedExperiment}
+#' Extract results as a SummarizedExperiment
+res <- quantify(chris, method = "sum", filled = FALSE)
+assays(res)$raw_filled <- featureValues(chris, method = "sum", filled = TRUE)
+res
+save(res, file = paste0(RDATA_PATH, "SumExp_chris.RData"))
+
+# also for blanks (if present)
+if (nrow(sampleData(blank_sample)) >= 1) {
+    res_blank <- quantify(blank_sample, method = "sum", filled = FALSE)
+    assays(res_blank)$raw_filled <- featureValues(blank_sample, method = "sum",
+                                                  filled = TRUE )
+    save(res_blank, file = paste0(RDATA_PATH, "SumExp_chris_blank.RData"))
+    }
+
+```
+
+
+# Session information
+
+R packages used for the analysis:
+
+```{r}
+sessionInfo()
+```
