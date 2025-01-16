@@ -48,10 +48,10 @@ During this workflow, we aim to identify analytes (semi targeted) co-aqcuired wi
 the Cooperative Health Research in South Tirol (CHRIS) study. For a
 description of the study, methods used for the collection, handling and
 aqcuisition of the liquid chromatography-mass spectrometry (LC-MS) samples,
-please see [@verri_hernandes_age_2022]. 
+please see [@verri_hernandes_age_2022].
 Samples are acquired in both positive and negative
 ionization mode, for which the pre-processing of the positive (pos) mode is
-performed and discussed in the Rmarkdown document `CHRIS_preprocessing_pos.Rmd`. 
+performed and discussed in the Rmarkdown document `CHRIS_preprocessing_pos.Rmd`.
 The (feature) filtering and normalization of the positive (pos)
 mode is discussed in the Rmarkdown document `CHRIS_filtering_normalization_pos.Rmd`.
 
@@ -106,14 +106,14 @@ library(tidyfr)
 
 # Load data
 
-We load the feature matrix of the latest CHRIS preprocessing, feature filtering 
-and normalisation strategy applied. The filtered df is not used further, since it does not 
+We load the feature matrix of the latest CHRIS preprocessing, feature filtering
+and normalisation strategy applied. The filtered df is not used further, since it does not
 contain the feature info from PP (i.e., rtmed and mzmed).
 
 ```{r load Rdata filtered df}
 #' Load preprocessing results smexperiment
-load(file.path(DATA_PATH, "SumExp_chris_norm.RData")) #res is object
-#load(file.path(DATA_PATH, "SumExp_chris_filtered_norm.RData")) #res is object NOT USE, found stds are in the removed FTs (of 3820#)!!! #' discarded were "Creatinine" [bad] and "Serotonin" [good] (from p180).
+#load(file.path(DATA_PATH, "SumExp_chris_norm.RData")) #res is object, crashed when loading locally and on server
+load(file.path(DATA_PATH, "SumExp_chris_filtered_norm.RData")) #res is object NOT USE, found stds are in the removed FTs (of 3820#)!!! #' discarded were "Creatinine" [bad] and "Serotonin" [good] (from p180). BUT also killed...
 res <- res[,res$sample_type != "Blank"]
 dim(res)
 
@@ -130,7 +130,7 @@ bio_data <- met_data[grep("_001", rownames(met_data)), ]
 tmp <- res[, res$sample_type == "Study"]
 
 #' somehow not same length, so keep FINDME
-#bio_data <- bio_data[rownames(bio_data) %in% tmp$file_name,]  
+#bio_data <- bio_data[rownames(bio_data) %in% tmp$file_name,]
 tmp <- tmp[, tmp$file_name %in% rownames(bio_data)]
 rownames(bio_data) <- tmp$sample_id     #duplicates POOL_1 #FINDME better solution so keep them in
 dim(bio_data)
@@ -168,7 +168,7 @@ batches_pool <- col_batch[sampleData(chris)$batch_id][pool_index]
 
 ```
 
-We load below the most likely adduct and the expected retention time for the 
+We load below the most likely adduct and the expected retention time for the
 standards defined in the lcms-standards repository (http://github.com/EuracBiomedicalResearch/lcms-standards).
 
 ```{r known-cmps, warning = FALSE}
@@ -189,14 +189,14 @@ nrow(std_info) #214
 
 # Subset data, needed for visual EIC evaluation
 
-Subset the filtered feature df to find in QC pool samples, for batch 1. 
+Subset the filtered feature df to find in QC pool samples, for batch 1.
 
 ```{r subset data df, eval = FALSE}
 #' keep only pool samples, do above depending filter
 qc_data <- met_data[grep("POOL_", rownames(met_data)), ]
 qc_data <- as.data.frame(qc_data)
 
-#info batches not loaded, for now, take first 10 samples, as 10 QCs in batch1 
+#info batches not loaded, for now, take first 10 samples, as 10 QCs in batch1
 qc_data <- qc_data[1:10, ]
 dim(qc_data)
 
@@ -274,7 +274,7 @@ mo <- pruneTarget(mo)
 
 ```
 
-For manual evaluation, done twice for subsets. Skip for report. 
+For manual evaluation, done twice for subsets. Skip for report.
 We filter the untargeted metabolomics CHRIS data in two ways for evaluation of EICs:
 
 - first, keeping the 10 QC pool of the first batch.
@@ -336,7 +336,7 @@ to_keep <- c(
   #FT00349 = "Alanine",   #2 peaks
   #FT00507 = "Dimethylglycine",   #2 peaks
   #FT00510 = "Choline",  #ugly
-  FT00531 = "Serine",    
+  FT00531 = "Serine",
   FT00666 = "Creatinine", #ugly
   #FT00698 = "Proline",  #2 peaks
   FT00739 = "Acetylglycine",  #ok but low intens
@@ -373,7 +373,7 @@ to_keep <- c(
   #FT01165 = "Salicylic acid", #not found in enough samples, other compound
   FT01252 = "Phosphorylethanolamine",
   FT01300 = "Tryptamine",
-  FT01366 = "Phenylpyruvic acid", 
+  FT01366 = "Phenylpyruvic acid",
   #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
   FT01370 = "Glutamine",   #2 peaks
   #FT01372 = "Glutamine",  #flat signal
@@ -529,7 +529,7 @@ quantile(tmp, 0.80537) #approx 80% of found stds has ppm < 5
 
 ```
 
-The annotated features, i.e. a df linking FTxx ID with the metabolite name from 
+The annotated features, i.e. a df linking FTxx ID with the metabolite name from
 lcms-standards, are saved for further evaluation.
 
 ```{r, eval = !file.exists(paste0(RDATA_PATH, "std_features.RData"))}
@@ -538,7 +538,7 @@ save(std_features, file = paste0(RDATA_PATH, "std_features.RData"))
 ```
 
 
-# Evaluation of retained features 
+# Evaluation of retained features
 
 Load feature list with both FTxxx and the annotated name from lcms-standards.
 
@@ -554,7 +554,7 @@ dim(std_features)
 
 ## Overlapping with p180
 
-For the annotated features which are also measured using targeted metabolomics 
+For the annotated features which are also measured using targeted metabolomics
 (Biocratis kit p180), we will evaluate whether this feature is matching
 by correlation plot / sensitivity analysis on a subset of samples.
 
@@ -572,7 +572,7 @@ tmet_ann <- labels(p180)
 stopifnot(all(colnames(tmet_data) == rownames(tmet_ann)))
 
 #colnames(tmet_data) <- tmet_ann$description
-#colnames(tmet_data) <- tmet_ann$biochemical_name 
+#colnames(tmet_data) <- tmet_ann$biochemical_name
 colnames(tmet_data) <- tmet_ann$aliases
 #colnames(tmet_data) <- tmet_ann$hmdb_id
 
@@ -605,26 +605,26 @@ tmet_data <- tmet_data[, metabolites]
 #check <- unique(check_aliases, check_biochemical_name)
 #check <- unique(check, check_description) #19
 to_check <- c("Arginine",
-             "Asparagine",          
-             "Citrulline",         
-             "Creatinine",          
-             "Glutamine",           
-             "L-Glutamic Acid",     
-             "Glycine",            
-             "Lysine",              
-             "Methionine",          
-             "Methioninesulfoxide", 
-             "Ornithine",           
-             "Serine",              
-             "Serotonin",           
-             "Hydroxyproline",     
-             "Taurine",             
-             "Tryptophan",          
-             "Tyrosine",            
-             "L-Carnitine",         
+             "Asparagine",
+             "Citrulline",
+             "Creatinine",
+             "Glutamine",
+             "L-Glutamic Acid",
+             "Glycine",
+             "Lysine",
+             "Methionine",
+             "Methioninesulfoxide",
+             "Ornithine",
+             "Serine",
+             "Serotonin",
+             "Hydroxyproline",
+             "Taurine",
+             "Tryptophan",
+             "Tyrosine",
+             "L-Carnitine",
              "Acetylcarnitine")
 
-#' subset p180, metabolites are columns   
+#' subset p180, metabolites are columns
 tmet_data <- tmet_data[, colnames(tmet_data) %in% to_check]  #FIND_ME better way than iter possible columns
 dim(tmet_data) #19
 
@@ -644,13 +644,13 @@ tmp <- std_features[std_features$feature_id %in% colnames(met_data), ]   #order 
 colnames(met_data) <- tmp$target_name
 
 #' keep only stds, also found in the p180
-met_data <- met_data[, colnames(met_data) %in% colnames(tmet_data)]  
+met_data <- met_data[, colnames(met_data) %in% colnames(tmet_data)]
 #dim(met_data) #19
 
-#' samplenames also keep overlapping between umet and tmetab using AIDs 
+#' samplenames also keep overlapping between umet and tmetab using AIDs
 #' (in tmetab also nafd 008 study samples present)
 #' and reorder, as in umetab ordered sandom (as analysed on machine)
-met_data <- met_data[rownames(met_data) %in% rownames(tmet_data),] 
+met_data <- met_data[rownames(met_data) %in% rownames(tmet_data),]
 met_data <- met_data[order(rownames(met_data), decreasing = FALSE),]
 tmet_data <- tmet_data[rownames(tmet_data) %in% rownames(met_data),]
 tmet_data <- tmet_data[order(rownames(tmet_data), decreasing = FALSE),]
@@ -660,8 +660,8 @@ dim(tmet_data)
 ```
 
 - plot corr for each annotated feature and write plt to file
-Performed using log(2) scaled data for bothe datasets: the untargeted set were 
-median scaled + between batch normalized peak intensities; the targeted set were 
+Performed using log(2) scaled data for bothe datasets: the untargeted set were
+median scaled + between batch normalized peak intensities; the targeted set were
 absolute concentration.
 
 ```{r compare_tmetab_umetab}
@@ -677,14 +677,14 @@ to_check[i]
 #' loop to safe plots
 for (i in 1:length(to_check)){
   #print( i)
-  
-  #' merge in from both lm models above, 
+
+  #' merge in from both lm models above,
   #' both log2 scaled
   tmp <- data.frame(sample_id = rownames(tmet_data),
                     x = log2(tmet_data[, to_check[i]]),
                     y = log2(met_data[, to_check[i]]))
   head(tmp)
-  
+
   #' for equation on plot
   linear_eq <- function(x,y) {
     #calculate equation (linear regression) and corresponding R2 value for on plot
@@ -701,12 +701,12 @@ for (i in 1:length(to_check)){
     )
     return(eq)
   }
-  
+
   #'calculate formula, R2 to add on plot
   equation <- linear_eq(x = tmp$x, y = tmp$y) #eq writen for plot
   #print('formula, R2:')
   #equation
-  
+
   #' scatterplot with coeff vales
   scatter_plot <- function(data) {
       ggplot(data, aes(x = x, y = y)) +
@@ -720,7 +720,7 @@ for (i in 1:length(to_check)){
                y = 'untargeted metabolomics') +
           theme_bw ()
   }
-  
+
   plt <- scatter_plot(tmp)
   ggsave(paste0(IMAGE_PATH, 'tmetab_vs_umetab/norm_bb/', "corr_", to_check[i], ".png"),
          plot = plt, dpi = 600, width = 12,
@@ -731,15 +731,15 @@ for (i in 1:length(to_check)){
 
 ```
 
-- manual inspection. After manual inspection, the following std found in the 
-targeted metabolomics are saved to be used in the untargeted analysis. Note: For
-some samples, the intensity jumps down for the untargeted analysis, but the same 
-trend is followed against the p180 targeted metabolomics.
+- manual inspection. After manual inspection, the following std found in the
+  targeted metabolomics are saved to be used in the untargeted analysis. Note: For
+  some samples, the intensity jumps down for the untargeted analysis, but the same
+  trend is followed against the p180 targeted metabolomics.
 
 ```{r good-from-p180-keep}
 #' see comments next to it if good
 to_check <- c("Arginine",               #ok*, some samples/batch jump down signal but follows conc p180
-             "Asparagine",              #ok  
+             "Asparagine",              #ok
              "Citrulline",              #ok
              #"Creatinine",             #no, just 2 blobs but no line so remove
              "Glutamine",               #? maybe? ok but few extreme outliers keep for now but flaw with label msmsm below
@@ -755,7 +755,7 @@ to_check <- c("Arginine",               #ok*, some samples/batch jump down signa
              "Taurine",                 #ok
              "Tryptophan",              #ok
              "Tyrosine",                #ok
-             "L-Carnitine",             #ok 
+             "L-Carnitine",             #ok
              "Acetylcarnitine")         #ok*, 2nd batch jump down signal but follows conc p180
 
 print('nr of analytical standards from p180 found in untargeted metabolimcs:')
@@ -775,7 +775,7 @@ to_keep <- c(
   #FT00349 = "Alanine",   #2 peaks
   #FT00507 = "Dimethylglycine",   #2 peaks
   #FT00510 = "Choline",  #ugly
-  FT00531 = "Serine",    
+  FT00531 = "Serine",
 #  FT00666 = "Creatinine", #ugly
   #FT00698 = "Proline",  #2 peaks
   FT00739 = "Acetylglycine",  #ok but low intens
@@ -812,7 +812,7 @@ to_keep <- c(
   #FT01165 = "Salicylic acid", #not found in enough samples, other compound
   FT01252 = "Phosphorylethanolamine",
   FT01300 = "Tryptamine",
-  FT01366 = "Phenylpyruvic acid", 
+  FT01366 = "Phenylpyruvic acid",
   #FT01367 = "Phenylpyruvic acid",  #higher prob other, less rtdev
   FT01370 = "Glutamine",   #2 peaks
   #FT01372 = "Glutamine",  #flat signal
@@ -923,7 +923,7 @@ length(to_keep)
 ## Inspection MS/MS spectra to DB
 
 For the annotated features which are not included in the targeted metabolomics,
-the following approach is chosen: check the ms/ms spectra in the spicked mixed 
+the following approach is chosen: check the ms/ms spectra in the spicked mixed
 and in a subset of QCs and samples.
 
 steps:
@@ -935,16 +935,16 @@ steps:
 - to keep and subset the std_features
 
 This was previously done, see repo `lcms-standards`. From the list with possible
-stds, the following were retained as found in our untargeted metabolomics 
+stds, the following were retained as found in our untargeted metabolomics
 (positive mode checked only). use the `match-standards-serum-mix` Rmd files.
 
 For mixes 12 to 19, this was not (yet) done. see TODO = TBD in table
-T- with mix12 
+T- with mix12
 
-Added in comments below in which mix std present and at summary which label it has, 
+Added in comments below in which mix std present and at summary which label it has,
 eg label "A". If multiple adduct are found, we only focus in the adduct that we
-retrieved (using the loaded sdt_info == standards_dilution.txt file) 
-in the For information regarding the qualility labels, repo `lcms-standards`. 
+retrieved (using the loaded sdt_info == standards_dilution.txt file)
+in the For information regarding the qualility labels, repo `lcms-standards`.
 
 ```{r}
 #' manually subset the list to_keep (above with Feat names PP) with this found list
@@ -956,7 +956,7 @@ to_keep <- c(
   #FT00349 = "Alanine",   #2 peaks
   #FT00507 = "Dimethylglycine",   #2 peaks
   #FT00510 = "Choline",  #ugly
-  FT00531 = "Serine",   #mix 7, A 
+  FT00531 = "Serine",   #mix 7, A
   #FT00666 = "Creatinine", #ugly, skipped after corr plot p180; mix 7: C
   #FT00698 = "Proline",  #2 peaks
   FT00739 = "Acetylglycine",  #ok but low intens,; mix6: C
@@ -965,7 +965,7 @@ to_keep <- c(
   #FT00743 = "Valine", #flat signal
   #FT00745 = "Betaine", # multiple peaks
   #FT00745 = "Valine", # multiple peaks
-  FT00769 = "Threonine",  #mix5: B 
+  FT00769 = "Threonine",  #mix5: B
   FT00796 = "Phenylethylamine",  #mix4: A
   #FT00797 = "Phenylethylamine",  #noise
   #FT00799 = "Phenylethylamine", #noise
@@ -1100,9 +1100,9 @@ length(to_keep)
 
 ```
 
-=> recap labels using 3 levels of evidence: 
+=> recap labels using 3 levels of evidence:
 
-1. expected m/z, 
+1. expected m/z,
 2. difference in measured intensity,
 3. MS2-based annotation.
 
@@ -1127,9 +1127,9 @@ standards using different confidence levels:
 # Final list of annotated features
 
 From the in total `r nrow(featureDefinitions(chris))` features,
-`r length(unique(std_features$feature_id))` could be annotated to at least one 
-of the `r nrow(std_info)` compounds, 
-confirmed by (1) profiling using commercial standards in the same samples, or 
+`r length(unique(std_features$feature_id))` could be annotated to at least one
+of the `r nrow(std_info)` compounds,
+confirmed by (1) profiling using commercial standards in the same samples, or
 by (2) comparing MS/MS fragments using spicked standards in the QC pool samples.
 Both approaches are accepted as Tier 1 annotations.
 
@@ -1147,7 +1147,7 @@ to_keep <- c(
   #FT00349 = "Alanine",   #2 peaks
   #FT00507 = "Dimethylglycine",   #2 peaks
   #FT00510 = "Choline",  #ugly
-  FT00531 = "Serine",   #mix 7, A 
+  FT00531 = "Serine",   #mix 7, A
   #FT00666 = "Creatinine", #ugly, mix 7: C
   #FT00698 = "Proline",  #2 peaks
   FT00739 = "Acetylglycine",  #ok but low intens,; mix6: C
@@ -1156,7 +1156,7 @@ to_keep <- c(
   #FT00743 = "Valine", #flat signal
   #FT00745 = "Betaine", # multiple peaks
   #FT00745 = "Valine", # multiple peaks
-  FT00769 = "Threonine",  #mix5: B 
+  FT00769 = "Threonine",  #mix5: B
   FT00796 = "Phenylethylamine",  #mix4: A
   #FT00797 = "Phenylethylamine",  #noise
   #FT00799 = "Phenylethylamine", #noise
@@ -1302,7 +1302,7 @@ flags <- c(
   #FT00349 = "Alanine",   #2 peaks
   #FT00507 = "Dimethylglycine",   #2 peaks
   #FT00510 = "Choline",  #ugly
-  "Serine" = 'mix 7: A', 
+  "Serine" = 'mix 7: A',
   "Creatinine" = 'mix 7: C',
   #FT00698 = "Proline",  #2 peaks
   "Acetylglycine" = 'mix6: C',
@@ -1354,8 +1354,8 @@ flags <- c(
   #FT01607 = "Histidine",  #no, next to it
 # "Threonic Acid" = 'mix7: Inconclusive',
 # "Serotonin" = 'mix14: TBD',
-  #FT01745 = "alpha-Aminoadipic acid",  #flat signal 
-  #FT01750 = "L-Carnitine",  #no, next to it 
+  #FT01745 = "alpha-Aminoadipic acid",  #flat signal
+  #FT01750 = "L-Carnitine",  #no, next to it
   "L-Carnitine" = 'mix11: A',
 # "Nicotine" = 'mix17: TBD',
   #FT01777 = "Nicotine",  #no, next to it
@@ -1450,7 +1450,7 @@ length(flags)
 
 ```{r subset-res-annotated}
 #' retain only the good found annotations
-std_features <- std_features[rownames(std_features) %in% names(to_keep), ]  
+std_features <- std_features[rownames(std_features) %in% names(to_keep), ]
 dim(std_features)
 
 #keep only annotated features
@@ -1495,5 +1495,3 @@ sessionInfo()
 
 
 # References
-
-
