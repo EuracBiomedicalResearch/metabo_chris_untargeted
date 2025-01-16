@@ -190,13 +190,8 @@ Replace filenames with AIDs and create a met_ann df for the lm below.
 met_data <- t(assays(res)$norm_bb)    #the median scaled AND BB norm MSexperiment
 dim(met_data)
 
-#' no tdff, do this instead
-#met_ann <- t(met_data) #feats as rows
-met_ann <- data.frame(matrix(vector(mode = 'numeric',length = ncol(met_data*2)), nrow = ncol(met_data), ncol = 2))
-rownames(met_ann) <- colnames(met_data)
-#colnames(met_ann) <- colData(res)$sample_id
-#dim(met_ann)
-#met_ann[1:10,1:2]
+#' info for metabolites in met_ann
+met_ann <- rowData(res) #== variablemetadata, names of rt/mz here too with TF001...
 
 #' define the columns with metabolite concentrations
 metabolites <- colnames(met_data)
@@ -743,7 +738,7 @@ Export results for inspection:
 
 ```{r export-results w BMI}
 results <- data.frame(
-    met_ann[rownames(lm_output), ], #all col from met_ann keep (2 empty too)
+    met_ann[rownames(lm_output), c("mzmed", "rtmed", "cv_qc_chris")],
     lm_output,
     diff_perc
 )
@@ -869,7 +864,7 @@ The (static) table with the significant metabolites is shown below:
 
 ```{r table-sig-sex w BMI, results = "asis", echo = FALSE}
 significant_table <- function(x, comparison = character(),
-                              columns = "cv_qc_chris") {
+                              columns = c("mzmed", "rtmed", "cv_qc_chris")) {
     sigs <- x[, paste0("significant_", comparison)]
     columns <- c(columns, paste0(c("coef_", "p.adj_", "effectSize_"),
                                  comparison))
@@ -893,7 +888,7 @@ The full results table is shown below.
 ##
 oorder <- results[order(results[, paste0("p.adj_", TARGET)]), ]
 
-pandoc.table(oorder[1:5, c(1, 4, 7, 10, 13, 17)], style = "rmarkdown",
+pandoc.table(oorder[1:5, c(4, 5, 6, 13, 14, 15, 16, 17, 18, 19, 20, 21)], style = "rmarkdown",
              split.table = Inf, caption = "Top 5 metabolites for type dietary healthy")
 
 datatable(results) |>
@@ -928,45 +923,60 @@ box_plot <- function(data, aes, analyte) {
         theme_bw ()
 }
 
+scatter_plot <- function(data, aes, analyte) {
+    ggplot(data, aes) +
+        geom_jitter(position = position_jitter(0.24),
+                    aes(colour = Sex, alpha = 0.5 , size = 0.1)) +
+        stat_smooth(method = lm, se = TRUE) + #with standard error
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8),
+              axis.title.y = element_blank()) + labs(title = analyte) +
+        theme_bw ()
+}
+
 #' for boxplot func to work automatically
 tmp_colnr <- which(colnames(met_data) == TARGET)
-met_data$tmp_target <- met_data[, tmp_colnr]
+met_data$tmp_target <- met_data[, tmp_colnr]   #value of eg BMI
 
 ```
 
 ```{r box11, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
-top_analyte <- oorder[1, 1]
-s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
-                analyte = TARGET)
+top_analyte <- rownames(oorder)[1]
+met_data$top_analyte <- met_data[, top_analyte]  #intensities of metabolite
+s_1 <- scatter_plot(met_data, aes(x = tmp_target, y = top_analyte),
+                analyte = top_analyte)
 ggplotly_or_not(s_1, PLOTLY)
 
 ```
 
 ```{r box12, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
 top_analyte <- oorder[2, 1]
-s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
-                analyte = TARGET)
+met_data$top_analyte <- met_data[, top_analyte]
+s_1 <- scatter_plot(met_data, aes(x = tmp_target, y = top_analyte),
+                analyte = top_analyte)
 ggplotly_or_not(s_1, PLOTLY)
 ```
 
 ```{r box13, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
 top_analyte <- oorder[3, 1]
-s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
-                analyte = TARGET)
+met_data$top_analyte <- met_data[, top_analyte]
+s_1 <- scatter_plot(met_data, aes(x = tmp_target, y = top_analyte),
+                analyte = top_analyte)
 ggplotly_or_not(s_1, PLOTLY)
 ```
 
 ```{r box14, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
 top_analyte <- oorder[4, 1]
-s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
-                analyte = TARGET)
+met_data$top_analyte <- met_data[, top_analyte]
+s_1 <- scatter_plot(met_data, aes(x = tmp_target, y = top_analyte),
+                analyte = top_analyte)
 ggplotly_or_not(s_1, PLOTLY)
 ```
 
 ```{r box15, fig.path = IMAGE_PATH, fig.width=10, fig.height=6, warning = FALSE}
 top_analyte <- oorder[5, 1]
-s_1 <- box_plot(met_data, aes(y = tmp_target, x = top_analyte),
-                analyte = TARGET)
+met_data$top_analyte <- met_data[, top_analyte]
+s_1 <- scatter_plot(met_data, aes(x = tmp_target, y = top_analyte),
+                analyte = top_analyte)
 ggplotly_or_not(s_1, PLOTLY)
 ```
 
@@ -989,7 +999,7 @@ colnames(res) <- res$sample_name
 
 Export the normalized data as a TDFF module.
 
-```{r, eval = TRUE}
+```{r, eval = FALSE}
 #' export as tdff with "norm_bb" assayNames
 export_tdf(
     name = "metabolomics_norm_bb",
@@ -1006,7 +1016,19 @@ export_tdf(
 
 ```
 
+In addition, we also export the results table from the lm containing the m/z,
+rt, metabolite feature ID, statistics (coef, es) and p-vlues (adj. p-value) for
+subsequent analysis (eg pathway enrichment and analysis).
 
+```{r export-lm-results}
+#' add rownames as a column
+results$AID <- rownames(results)
+
+#' write results (original order) for further analysis
+handle <- file.path(DATA_PATH, 'lm_output_results_metab.txt')
+write.table(results, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+```
 
 
 # Acknowlegments
