@@ -1,0 +1,664 @@
+---
+title: "Mummichog annotation retrieval"
+author: "Marilyn De Graeve, Johannes Rainer"
+affiliation: "Eurac Research, Bolzano, Italy"
+date: "2024-12-13"
+graphics: yes
+output:
+  BiocStyle::html_document:
+    toc_float: true
+    code_folding: hide
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+**Modified**: `r file.info("Mummichog_annotations.Rmd")$mtime`<br />
+**Compiled**: `r date()`
+
+```{r configuration, include = TRUE, cached = FALSE}
+
+#' introduction
+STUDY <- "CHRIS study"
+TARGET <- "BMI (numeric value) "
+DATASET <- "untargeted metabolomics, positive mode"
+
+#' settings
+FILENAME <- "CHRIS_BMI_umetabpos"
+LOCATION <- 'local' #'server' OR 'local', change in chunk directories if needed
+
+#' target variables
+#print('target of the linear regression model:')
+TARGET_COLNAME <- 'BMI'
+#print('more concrete defined target of the linear regression model:')
+TARGET_LMNAME <- 'BMI'
+
+```
+
+
+```{r style, echo = FALSE, results = "hide", message = FALSE}
+#' rmarkdown format settings
+library("BiocStyle")
+library("kableExtra") 
+library("knitr")
+library("rmarkdown")
+opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE,
+               cache = FALSE, fig.width = 7, fig.height = 7, time_it = TRUE)
+knitr::knit_hooks$set(time_it = local({
+  now <- NULL
+  function(before, options) {
+    if (before) {
+      # record the current time before each chunk
+      now <<- Sys.time()
+    } else {
+      # calculate the time difference after a chunk
+      res <- difftime(Sys.time(), now, units = "secs")
+      # return a character string to show the time
+      paste("    Time for this code chunk to run:", round(res,
+        2), "seconds")
+    }
+  }
+}))
+BiocStyle::markdown()
+
+```
+
+# Introduction
+
+In this document, the Mummichog algorithm from Li et al. are performed on the
+significant metabolite list on the targeted metabolomics data after statistical
+analyis (linear models or t-test todo!!!) from the CHRIS obesity project.
+
+As POC, we will use the lm results table from:
+(metabo_chris_untargeted/CHRIS_lm_pos.html)[metabo_chris_untargeted/CHRIS_lm_pos.html].
+There, the exploratory statistical analyis (linear models) are performed on the
+untargeted metabolomics data from the CHRIS study (baseline); using the
+continious variable "BMI" as a target of interest.
+
+The (static) table with the significant metabolites only contained 11
+significant variables, maybe not enough to leverage the power of the Mummichog
+algoritm. ??todo with testdata first!!! => NO, input is full list, so also give
+the not-significant w their values. 
+
+This document will be TEMPLATE, to be used for different datasets - target
+significant tables.
+
+
+# Setup
+
+## Directories
+
+```{r directories}
+#' General settings
+filename <- "Mummichog_annotations"
+
+#' Path to the data
+DATA_INPUT_PATH <- '/home/mdegraeve/Documents/Files/Work_Eurac/Projects/metabo_chris_untargeted/data' #FINDME!
+
+#' Path to store RData files
+DATA_OUTPUT_PATH <- paste0("data/mummichog/")
+dir.create(DATA_OUTPUT_PATH, recursive = TRUE, showWarnings = FALSE)
+
+
+```
+
+## Libraries
+
+```{r libraries}
+```
+
+## Functions
+
+```{r functions}
+```
+
+# Steps
+
+The following steps are performed:
+
+- [x] in the metabo_chris_untargeted/CHRIS_lm_pos.html: write table with the ALL
+  (both significant and non-significant) metabolites with mz, rt, id, p-value (=
+  adj.p lm) and statistic (= coef lm) after performing lm with `r TARGET` as
+  target, using the `R DATASET` dataset.
+- [x] rename colnames so c(m/z, retention_time, p_value, statistic,
+  CompoundID_from_user, ...)
+- [ ] run mummichog 
+  - [x] (now via bash, 
+  - [ ] future w spectripy)
+- [x] load and cleanup results into 1 df.
+- [ ] add results as putative IDs into the sumExp object and save as Rdata.
+
+
+# load and rename results from lm
+
+load the results from lm analysis. write table with the ALL
+(both significant and non-significant) metabolites with mz, rt, id, p-value (=
+  adj.p lm) and statistic (= coef lm) after performing lm with `r TARGET` as
+  target, using the `R DATASET` dataset.
+
+```{r load-results-lm}
+
+#' example data: 
+#    - dataset: umetab pos chris (3820#, come from umExp_chris_filtered_norm.RData) 
+#    - target: bmi (float, continious)
+#    - covariates: sex, age 
+#' after lm: 11 metab signif eg FT01399
+
+#' load data lm-results
+handle <- file.path(DATA_PATH, 'lm_output_results_metab.txt')
+lm_output_results_metab <- read.csv(handle, header = TRUE, sep="\t")  |>
+    as.data.frame()
+lm_output_results_metab[1:10, 1:10]
+dim(lm_output_results_metab)
+```
+
+rename colnames to c(m/z, retention_time, p_value, statistic,
+CompoundID_from_user, ...) so it fits the input in mummichog, write the table.
+
+```{r make-write-mummichog-input}
+#' make new df with correct names for mummichog
+df <- NULL
+df$m.z  <- lm_output_results_metab$mzmed
+df$retention_time  <- lm_output_results_metab$rtmed
+df$p_value  <- lm_output_results_metab[, paste0('p.adj_', TARGET_LMNAME)]
+df$statistic  <-lm_output_results_metab[, paste0('coef_', TARGET_LMNAME)]
+df$CompoundID_from_user <- lm_output_results_metab$AID
+df <- as.data.frame(df)
+head(df)
+
+#TODO m/z ipv m.z ...!!!! ok?
+
+
+#' write the mummichog input table
+handle <- file.path(DATA_INPUT_PATH, 'mummichog_input.txt')
+write.table(df, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+```
+
+
+# Run mummichog algoritm 
+
+## Run mummichog algoritm using Bash
+
+Before trying to integrate the mummichog algorithm using spectripy, we first
+want to run it automatically from this script. it is run locally, on a Linux
+computer with the Mummichog installed according to the instructions from
+'https://github.com/shuzhao-li/mummichog'.
+
+After install using pip in the linux terminal, it is run using commands:
+
+- cd Documents/Files/Work_Eurac/Projects/biochem_pathway_analysis/
+- python3 -m mummichog.main -f testdata0710.txt -o t2
+
+the results are saved in the same folder, as the input. you will get a folder
+with various output. in the first instance, i.e. for the putative annotation of
+untargeted metabolic features, we are interested in 1 tabular output. See
+section [Results import] below.
+
+run the command using R (calls bash), for linux:
+
+```{r run-mummichog-from-bash}
+
+#TODO!!!
+#command <- 'python3.10 -m mummichog.main -f ~/Documents/Files/Work_Eurac/Projects/biochem_pathway_analysis/testdata0710.txt -o t2' #test
+#command <- 'bash ~/Documents/Files/Work_Eurac/Code/Sh_scripts/mummichog2.sh'
+command <- 'python3.10 -m mummichog.main -f ~/Documents/Files/Work_Eurac/Projects/biochem_pathway_analysis/data/mummichog_input.txt -o t2'
+command <- paste0('python3.10 -m mummichog.main -f ', handle, ' -o t2')
+command
+
+system(command)
+
+```
+
+This will be either called in the spectripy environment, if possible. will try
+that next. therefor, no need to go too much into win/linux differences (see old
+code marilyn if needed).
+
+
+# Results from mummichog (pasted from html report)
+
+For the CHRIS untargeted metabolomics - pos mode lm model with BMI, 
+pasted from the mummichog html report:
+
+User input data
+
+User supplied 3820 features as reference list.We are using 348 features (p < 0.000100) as significant list. The feature level data are shown in the Manhattan plots below.
+Top pathways
+
+The reference feature list is mapped to 205 EmpiricalCompounds, significant features to 71 EmpiricalCompounds. In the table below, pathway_size is number of detected EmpiricalCompounds for each pathway; overlap_size is number of significant EmpiricalCompounds. Empirical p-values are estimated by permutation test. Details on EmpiricalCompounds are in 'tables/ListOfEmpiricalCompounds.tsv'.
+
+Pathways 	overlap_size	pathway_size	p-value 	overlap_EmpiricalCompounds
+Purine metabolism 	12	17	0.0005	E373,E336,E10,E135,E147,E377,E127,E128,E379,E113,E230,E105
+N-Glycan Degradation 	6	6	0.0005	E214,E219,E305,E217,E218,E216
+Galactose metabolism 	7	8	0.00067	E214,E219,E305,E339,E217,E218,E216
+Sialic acid metabolism 	8	10	0.00084	E214,E219,E305,E339,E217,E51,E218,E216
+Alanine and Aspartate Metabolism 	10	14	0.00084	E29,E202,E102,E10,E135,E196,E127,E128,E379,E105
+Glycosphingolipid biosynthesis - globoseries 	5	5	0.00092	E214,E219,E217,E218,E216
+N-Glycan biosynthesis 	6	7	0.0016	E214,E219,E217,E450,E218,E216
+Pyrimidine metabolism 	11	17	0.00176	E29,E102,E84,E135,E49,E111,E127,E85,E128,E379,E105
+Caffeine metabolism 	4	4	0.00345	E214,E215,E211,E216
+Hexose phosphorylation 	5	6	0.0058	E214,E219,E217,E218,E216
+Fructose and mannose metabolism 	5	6	0.0058	E214,E219,E217,E218,E216
+Nitrogen metabolism 	5	6	0.0058	E102,E135,E127,E128,E105
+Pentose phosphate pathway 	7	10	0.00647	E214,E219,E111,E217,E379,E218,E216
+Vitamin B9 (folate) metabolism 	6	8	0.00655	E202,E10,E135,E314,E51,E483
+Glycosphingolipid metabolism 	6	8	0.00655	E214,E219,E217,E51,E218,E216
+Bile acid biosynthesis 	3	3	0.01151	E379,E10,E5
+Vitamin H (biotin) metabolism 	3	3	0.01151	E134,E379,E133
+Glycolysis and Gluconeogenesis 	6	9	0.01302	E214,E219,E217,E379,E218,E216
+Phosphatidylinositol phosphate metabolism 	6	9	0.01302	E214,E219,E304,E217,E218,E216
+Aminosugars metabolism 	4	5	0.01344	E128,E305,E127,E135
+Starch and Sucrose Metabolism 	5	7	0.01378	E214,E219,E217,E218,E216
+Glycine, serine, alanine and threonine metabolism 	13	27	0.02504	E29,E71,E165,E70,E10,E135,E49,E51,E99,E379,E88,E9,E164
+Glutathione Metabolism 	5	8	0.02764	E29,E73,E10,E135,E87
+Aspartate and asparagine metabolism 	17	38	0.02966	E73,E379,E105,E133,E102,E240,E134,E10,E135,E49,E91,E127,E92,E128,E87,E62,E196
+Vitamin B5 - CoA biosynthesis from pantothenate 	2	2	0.03974	E379,E282
+Lipoate metabolism 	2	2	0.03974	E134,E133
+CoA Catabolism 	2	2	0.03974	E379,E282
+Arachidonic acid metabolism 	3	4	0.04058	E379,E10,E135
+Leukotriene metabolism 	3	4	0.04058	E423,E379,E10
+Selenoamino acid metabolism 	3	4	0.04058	E29,E379,E51
+
+Top modules
+
+Network modules may capture concerted metabolite activities that are missed by predefined pathways. Use pull-down menus to visualize modules and the activity network, which tries to combine the results of pathway/module analyses. The visualization requires interenet connection.
+
+module_1, p=0.00285, 64 metabolites
+Glycine, 2-methylbutyrylglycine, isovalerylglycine, L-Threonine, AMP, Sarcosine; N-Methylglycine, L-Allo-threonine, L-Serine, Hippurate; Hippuric acid; N-Benzoylglycine; Benzoylaminoacetic acid, L-Alanine, N,N-Dimethylglycine; Dimethylglycine, 5-Oxoproline, N-acetyl-L-alanine, 5-L-Glutamyl-L-alanine, L-Glutamate, D-Alanine, D-3-Amino-isobutanoate, beta-Alanine, L-Aspartate, N-Carbamoyl-beta-alanine, 3-Ureidoisobutyrate, 3-Aminoisobutyric acid; 3-Aminoisobutanoate; 3-Amino-2-methylpropanoate, beta-Aminopropion aldehyde, (S)-2-Aminobutanoate; (S)-2-Aminobutanoic acid; (S)-2-Aminobutyric acid, Glycine betaine, 4-Aminobutanoate, L-3-Amino-isobutanoate, D-Serine, D-Proline, L-Proline, L-4-Hydroxyglutamate semialdehyde, L-Valine, 5,6-Dihydrothymine, L-1-Pyrroline-3-hydroxy-5-carboxylate, L-Leucine, L-Isoleucine, L-Tyrosine, L-Asparagine, L-Glutamine, L-Citrulline; 2-Amino-5-ureidovaleric acid; Citrulline, 5-amino-1-(5-phospho-D-ribosyl)imidazole-4-carboxylate, N-Acetyl-L-aspartate, Hypoxanthine, Xanthine, Inosine, 6-Thioxanthine 5'-monophosphate, alpha-N-Phenylacetyl-L-glutamine, L-Lysine, Taurine, 5-Formiminotetrahydrofolate; 5-Formimidoyltetrahydrofolate, N-Formyl-L-glutamate, Tetrahydrofolyl-[Glu](n); Tetrahydrofolyl-[Glu](n+1); THF-polyglutamate; Tetrahydropteroyl-[gamma-Glu]n; Tetrahydropteroyl-[gamma-Glu]n+1, L-2-Aminoadipate; L-alpha-Aminoadipate; L-alpha-Aminoadipic acid; L-2-Aminoadipic acid; L-2-Aminohexanedioate, , D-Glucose, myo-Inositol, D-Mannose, 3-beta-D-Galactosyl-sn-glycerol; Galactosylglycerol, beta-D-Glucose, alpha-D-Glucose, beta-D-Fructose; beta-Fruit sugar; beta-D-arabino-Hexulose; beta-Levulose; Fructose, N-Acetyl-D-glucosamine, N-Acetyl-D-mannosamine; 2-Acetamido-2-deoxy-D-mannose, dGMP
+module_2, p=0.00285, 8 metabolites
+Acetylhydrazine, 4-Acetamido-2-amino-6-nitrotoluene, Isoniazid, N-Acetylisoniazid; (N)1-Acetylisoniazid, 2,4-Diamino-6-nitrotoluene, N,N'-Diacetylhydrazine; Diacetylhydrazine, 1,7-Dimethylxanthine; Paraxanthine, 5-Acetylamino-6-formylamino-3-methyluracil; AFMU
+module_3, p=0.00285, 9 metabolites
+AMP, L-Leucine, Taurine, Inosine, L-Lysine, dGMP, Hypoxanthine, Xanthine, L-Valine
+module_4, p=0.00285, 6 metabolites
+beta-Aminopropion aldehyde, beta-Alanine, 3-Ureidoisobutyrate, 5,6-Dihydrothymine, N-Carbamoyl-beta-alanine, 3-Aminoisobutyric acid; 3-Aminoisobutanoate; 3-Amino-2-methylpropanoate
+module_5, p=0.00285, 19 metabolites
+L-Tyrosine, (S)-2-Aminobutanoate; (S)-2-Aminobutanoic acid; (S)-2-Aminobutyric acid, L-2-Aminoadipate; L-alpha-Aminoadipate; L-alpha-Aminoadipic acid; L-2-Aminoadipic acid; L-2-Aminohexanedioate, N-Formyl-L-glutamate, 6-Thioxanthine 5'-monophosphate, L-Isoleucine, 5-Formiminotetrahydrofolate; 5-Formimidoyltetrahydrofolate, Tetrahydrofolyl-[Glu](n); Tetrahydrofolyl-[Glu](n+1); THF-polyglutamate; Tetrahydropteroyl-[gamma-Glu]n; Tetrahydropteroyl-[gamma-Glu]n+1, L-Citrulline; 2-Amino-5-ureidovaleric acid; Citrulline, , 4-Aminobutanoate, 5-amino-1-(5-phospho-D-ribosyl)imidazole-4-carboxylate, L-Glutamine, L-3-Amino-isobutanoate, L-Aspartate, N-Acetyl-L-aspartate, L-Glutamate, alpha-N-Phenylacetyl-L-glutamine, L-Asparagine
+module_6, p=0.0114, 11 metabolites
+L-Allo-threonine, Glycine, L-Threonine, N,N-Dimethylglycine; Dimethylglycine, Hippurate; Hippuric acid; N-Benzoylglycine; Benzoylaminoacetic acid, 2-methylbutyrylglycine, Sarcosine; N-Methylglycine, L-Serine, isovalerylglycine, Glycine betaine, D-Serine
+module_7, p=0.0114, 9 metabolites
+myo-Inositol, 3-beta-D-Galactosyl-sn-glycerol; Galactosylglycerol, D-Glucose, beta-D-Fructose; beta-Fruit sugar; beta-D-arabino-Hexulose; beta-Levulose; Fructose, N-Acetyl-D-mannosamine; 2-Acetamido-2-deoxy-D-mannose, beta-D-Glucose, N-Acetyl-D-glucosamine, alpha-D-Glucose, D-Mannose
+module_8, p=0.01709, 6 metabolites
+5-L-Glutamyl-L-alanine, N-acetyl-L-alanine, 5-Oxoproline, D-Alanine, L-Alanine, D-3-Amino-isobutanoate
+EmpiricalCompounds favored by above analyses
+
+An EmpiricalCompound is a computational unit for a tentative metabolite. It can group multiple ions, and be any of the isobaric/isomeric species. This table contains EmpiricalCompounds prioritized by pathway/module analysis.
+
+EmpiricalCompound	Input m/z 	Retention time	ion	mz_diff	Statistic 	Significant
+E202 	Best guess: C01042, N-Acetyl-L-aspartate	C01045, C01042
+	176.055921970663 	173.694713316198	M+H[1+]	0.0005	-0.01	yes
+	198.038006551681 	173.861829437395	M+Na[1+]	0.0006	-0.02	yes
+E73 	Best guess: C03740, 5-L-Glutamyl-L-alanine	C03740
+	219.097532358774 	173.778214366121	M+H[1+]	-0.0	0.01	yes
+	241.079235672381 	173.521904078937	M+Na[1+]	-0.0003	0.01	yes
+E71 	Best guess: C00188, L-Threonine	C05519, C00188
+	120.065523131714 	173.073457066636	M+H[1+]	0.0	-0.0	no
+	121.068458062774 	173.073533238983	M(C13)+H[1+]	-0.0004	-0.0	no
+	142.047326431032 	173.28763510354	M+Na[1+]	-0.0002	-0.02	yes
+E133 	Best guess: C00047, L-Lysine	C00047
+	147.112705075048 	188.401597703773	M+H[1+]	-0.0001	0.01	no
+	148.115493917227 	188.795383051417	M(C13)+H[1+]	-0.0007	0.01	yes
+	169.09429589703 	189.017985302095	M+Na[1+]	-0.0005	0.01	yes
+E219 	Best guess: C00159, D-Mannose	C00031, C00221, C02336, C00267, C00962, C00795, C00137, C00984, C00159
+	203.052605699518 	157.306679354031	M+Na[1+]	-0.0001	0.01	yes
+E134 	Best guess: C00047, L-Lysine	C00047
+	147.11260202509 	197.510902449481	M+H[1+]	-0.0002	0.01	yes
+E10 	Best guess: C00037, Glycine	C00037
+	76.0399838804231 	171.000085201666	M+H[1+]	0.0007	-0.02	yes
+E135 	Best guess: C05938, L-4-Hydroxyglutamate semialdehyde	C00217, C00025, C05938
+	148.060368676706 	173.534733130586	M+H[1+]	-0.0001	0.06	yes
+	149.063322293979 	173.717647896661	M(C13)+H[1+]	-0.0006	0.06	yes
+	170.041515585337 	173.26346115276	M+Na[1+]	-0.001	0.05	yes
+E49 	Best guess: C03284, L-3-Amino-isobutanoate	C02356, C01026, C00334, C05145, C01205, C03284
+	104.070626269476 	170.028462115796	M+H[1+]	0.0	0.02	yes
+E111 	Best guess: C01801, Deoxyribose	C01801
+	135.064793569549 	183.621653668673	M+H[1+]	-0.0004	-0.01	yes
+E51 	Best guess: C00740, D-Serine	C00065, C00740
+	106.049924871492 	181.214777879227	M+H[1+]	0.0	-0.01	yes
+	107.053394356903 	181.220937864838	M(C13)+H[1+]	0.0001	-0.0	no
+E5 	Best guess: C00245, Taurine	C00245
+	126.021851798413 	171.869322381365	M+H[1+]	-0.0001	-0.0	no
+	64.0168155801004 	168.005957346195	M(C13)+2H[2+]	0.0005	-0.01	no
+	148.003739920283 	171.759923099613	M+Na[1+]	-0.0002	-0.01	yes
+E256 	Best guess: C16618, 6-Thioxanthine 5'-monophosphate	C16618
+	381.026323234369 	170.0503149422	M+H[1+]	-0.0002	0.02	yes
+	449.011919329513 	169.766617987116	M+HCOONa[1+]	-0.002	0.02	yes
+	202.006213859459 	169.561534512327	M+H+Na[2+]	-0.0017	0.01	no
+E113 	Best guess: C00262, Hypoxanthine	C01620, C00262
+	137.045627869455 	126.582512358947	M+H[1+]	-0.0001	0.01	yes
+	138.048236031546 	126.14019835728	M(C13)+H[1+]	-0.0009	0.01	yes
+E230 	Best guess: C11821, 5-Hydroxyisourate	C11821
+	185.030405750958 	143.799427970004	M+H[1+]	-0.0002	0.03	yes
+E164 	Best guess: CE4968, isovalerylglycine	CE4970, CE4968
+	181.07179618207 	37.2666769819766	M+Na[1+]	0.0008	0.03	yes
+E450 	Best guess: C01246, Dolichyl beta-D-glucosyl phosphate	C01246
+	489.225461961012 	183.498298899609	M+Na[1+]	0.003	0.02	yes
+E483 	Best guess: C03541, Tetrahydrofolyl-[Glu](n)	C03541
+	726.247195793601 	172.170403402053	M+Na[1+]	0.0018	0.02	yes
+E423 	Best guess: CE6193, 18-carboxy-dinor-LTE4	CE6193
+	440.172943535541 	166.765396065663	M+H[1+]	-0.0008	0.06	yes
+E84 	Best guess: C00906, 5,6-Dihydrothymine	C00906
+	129.065648761369 	169.888238507885	M+H[1+]	-0.0002	-0.02	yes
+E165 	Best guess: CE4968, isovalerylglycine	CE4970, CE4968
+	181.071856704847 	49.9074854160341	M+Na[1+]	0.0009	0.04	yes
+E147 	Best guess: C00385, Xanthine	C00385
+	153.040390069727 	140.221429374424	M+H[1+]	-0.0003	0.02	yes
+E85 	Best guess: C00906, 5,6-Dihydrothymine	C00906
+	151.047560591964 	179.505557121695	M+Na[1+]	-0.0003	-0.01	yes
+E333 	Best guess: C04148, alpha-N-Phenylacetyl-L-glutamine	C04148, C05642
+	287.100403998584 	67.1785265203047	M+Na[1+]	0.0001	-0.02	yes
+	265.118359707076 	67.2065113808169	M+H[1+]	0.0001	-0.01	yes
+E87 	Best guess: C04282, 1-Pyrroline-4-hydroxy-2-carboxylate	C01879, C04281, C04282
+	130.049812413726 	179.663907541441	M+H[1+]	-0.0001	-0.01	yes
+	130.049763850925 	173.428721779296	M+H[1+]	-0.0001	0.05	yes
+	131.052859115354 	179.498809818896	M(C13)+H[1+]	-0.0004	-0.0	no
+	152.031549466187 	179.529467326262	M+Na[1+]	-0.0003	-0.01	no
+	198.038006551681 	173.861829437395	M+HCOONa[1+]	0.0007	-0.02	yes
+E62 	Best guess: C00148, L-Proline	CE4788, C00763, C00148
+	116.070559412872 	169.753632494793	M+H[1+]	-0.0	0.01	yes
+	117.073760955606 	169.70894047301	M(C13)+H[1+]	-0.0002	0.01	yes
+	138.05249818224 	169.360639746656	M+Na[1+]	-0.0001	0.01	no
+E88 	Best guess: CE1554, N-acetyl-L-alanine	CE1554
+	130.049715538965 	66.8188552456466	M[1+]	-0.0002	-0.0	no
+	153.040390069727 	140.221429374424	M+Na[1+]	0.0007	0.02	yes
+E304 	Best guess: C04299, D-myo-Inositol 1,2-cyclic phosphate	C04299
+	243.0276125082 	210.87146136568	M+H[1+]	0.0011	0.02	yes
+E240 	Best guess: C05829, 	C05829
+	191.066363204313 	185.849912222947	M+H[1+]	0.0001	0.01	yes
+E373 	Best guess: C04751, 5-amino-1-(5-phospho-D-ribosyl)imidazole-4-carboxylate	C04751
+	340.054671978089 	169.736761012398	M+H[1+]	0.0006	0.03	yes
+E336 	Best guess: C00294, Inosine	C00294
+	269.088265932963 	146.088822290858	M+H[1+]	0.0002	-0.02	yes
+	270.091189228949 	145.822689567745	M(C13)+H[1+]	-0.0003	-0.02	yes
+	291.070333186397 	146.369284621043	M+Na[1+]	0.0003	-0.01	no
+E170 	Best guess: C00956, L-2-Aminoadipate	C00956
+	162.075890021504 	176.037706345584	M+H[1+]	-0.0002	0.02	yes
+E305 	Best guess: C00140, N-Acetyl-D-glucosamine	C01074, C00645, C00140
+	244.079324040822 	155.051494706048	M+Na[1+]	0.0001	0.01	yes
+E210 	Best guess: C01586, Hippurate	CE5536, C01586
+	180.065488342692 	36.7758046030458	M+H[1+]	0.0	-0.03	yes
+E218 	Best guess: C00159, D-Mannose	C00031, C00221, C02336, C00267, C00962, C00795, C00137, C00984, C00159
+	203.052613666493 	149.898814430292	M+Na[1+]	-0.0001	0.01	yes
+E377 	Best guess: C00942, 3',5'-Cyclic GMP	C00942
+	346.057788707732 	179.576020672889	M+H[1+]	0.0031	-0.01	yes
+E91 	Best guess: C00408, L-Pipecolate	C05936, C00408
+	130.086145983243 	156.843450542871	M+H[1+]	-0.0001	-0.03	yes
+E339 	Best guess: C05401, 3-beta-D-Galactosyl-sn-glycerol	C05401
+	277.089732447053 	173.184468027039	M+Na[1+]	0.0003	-0.01	yes
+E127 	Best guess: C00819, D-Glutamine	C00064, C05100, C00819
+	147.076381935189 	179.61347740865	M+H[1+]	0.0	-0.01	yes
+	148.078935101464 	179.655294850676	M(C13)+H[1+]	-0.0008	-0.01	yes
+	169.058297267761 	179.484874997502	M+Na[1+]	-0.0001	-0.01	yes
+E92 	Best guess: C00408, L-Pipecolate	C05936, C00408
+	130.086119695417 	188.119428816151	M+H[1+]	-0.0002	0.01	yes
+	131.089245218966 	188.530128657552	M(C13)+H[1+]	-0.0004	0.0	no
+E99 	Best guess: C00300, Creatine	C00300
+	132.076578751122 	169.841525023698	M+H[1+]	-0.0002	0.04	yes
+	133.079220685349 	169.832064371467	M(C13)+H[1+]	-0.001	0.05	yes
+	154.05835318726 	170.397834572643	M+Na[1+]	-0.0004	0.03	yes
+E128 	Best guess: C00819, D-Glutamine	C00064, C05100, C00819
+	147.076484717754 	191.854864509991	M+H[1+]	0.0001	-0.01	yes
+E101 	Best guess: C00407, L-Isoleucine	C00123, C00407
+	132.101866089207 	153.538623115824	M+H[1+]	-0.0	0.02	yes
+	133.104938127499 	153.424774861243	M(C13)+H[1+]	-0.0003	0.02	yes
+E379 	Best guess: C00362, dGMP	C00020, C00362
+	347.064966805791 	179.594738137385	M[1+]	0.0024	-0.01	yes
+	348.067336232879 	179.591604585095	M+H[1+]	-0.003	-0.01	yes
+E196 	Best guess: C00327, L-Citrulline	C00327
+	175.095753701596 	187.732648435304	M[1+]	0.0006	-0.0	no
+	176.102968551451 	182.294147749474	M+H[1+]	-0.0	-0.01	yes
+	177.105626356365 	182.246445607546	M(C13)+H[1+]	-0.0008	-0.01	yes
+	198.084927121057 	182.036220388696	M+Na[1+]	-0.0	-0.01	yes
+E216 	Best guess: C00159, D-Mannose	C13747, C07480, C00031, C00221, C02336, C00267, C00962, C00795, C00137, C00984, C00159
+	203.052650777453 	167.518683557958	M+Na[1+]	-0.0	0.01	yes
+E29 	Best guess: C00133, D-Alanine	C00213, C00041, C00099, C00133
+	90.055297651227 	170.125710486656	M+H[1+]	0.0003	0.02	yes
+E214 	Best guess: C00159, D-Mannose	C13747, C07480, C00031, C00221, C02336, C00267, C00962, C00795, C00137, C00984, C00159
+	181.071856704847 	49.9074854160341	M+H[1+]	0.0012	0.04	yes
+	182.074876500163 	49.8573391766011	M(C13)+H[1+]	0.0008	0.04	yes
+E215 	Best guess: C07480, 	C13747, C07480
+	203.052605699518 	157.306679354031	M+Na[1+]	-0.0014	0.01	yes
+	203.052613666493 	149.898814430292	M+Na[1+]	-0.0014	0.01	yes
+	249.061228653683 	154.295838909063	M+HCOONa[1+]	0.0019	0.0	no
+E102 	Best guess: C00152, L-Asparagine	C02642, C00152
+	133.060695520522 	183.730017864071	M+H[1+]	-0.0001	-0.01	yes
+	134.063340346426 	183.707904027794	M(C13)+H[1+]	-0.0008	-0.01	yes
+	155.042554251059 	183.693592910717	M+Na[1+]	-0.0002	-0.01	yes
+E70 	Best guess: C00183, L-Valine	C00719, C00431, C00183
+	118.08619106547 	162.151489354211	M+H[1+]	-0.0001	0.01	yes
+	119.089262402651 	164.636265573288	M(C13)+H[1+]	-0.0004	0.01	yes
+	140.068068961457 	160.604592575579	M+Na[1+]	-0.0002	-0.01	yes
+E37 	Best guess: C00082, L-Tyrosine	C00082, CE2174
+	182.080751759631 	168.213651056991	M+H[1+]	-0.0004	0.02	yes
+E217 	Best guess: C00159, D-Mannose	C00031, C00221, C02336, C00267, C00962, C00795, C00137, C00984, C00159
+	181.07179618207 	37.2666769819766	M+H[1+]	0.0011	0.03	yes
+E314 	Best guess: C00664, 5-Formiminotetrahydrofolate	C00664
+	473.185636267121 	185.325552315865	M+H[1+]	-0.0035	0.04	yes
+E282 	Best guess: C00864, (R)-Pantothenate	C00864
+	220.118065127297 	59.5423480070644	M+H[1+]	0.0001	0.02	yes
+E9 	Best guess: C05665, beta-Aminopropion aldehyde	C01888, C05665
+	142.047326431032 	173.28763510354	M+HCOONa[1+]	-0.0002	-0.02	yes
+	74.0608093047581 	173.098709903041	M+H[1+]	0.0007	-0.0	no
+E105 	Best guess: C00402, D-Aspartate	C00049, C00402
+	134.044614484966 	181.073887487692	M+H[1+]	-0.0002	0.02	yes
+E211 	Best guess: C07480, 	CE5541, C13747, C07480
+	180.065488342692 	36.7758046030458	M[1+]	0.0013	-0.03	yes
+	181.07179618207 	37.2666769819766	M+H[1+]	-0.0002	0.03	yes
+More data
+
+Full data tables from pathway analysis, module analysis and activity network are stored in the 'tables/' directory. The tsv files can be imported into a spreadsheet program, e.g. MS Excel. Under the 'figures/network_modules/' directory are files intended for Cytoscape (cytoscape.org) visualization. Please refer to Cytoscape's guides for details. Details of this run are recorded in file mummichog.log.txt. 
+
+
+# Results mummichog import
+
+After running the algoritm (bash script on pc with py/mummichoc installed), 
+todo into spectripy... !!!,
+the following table os imported:
+
+- userInput_to_EmpiricalCompounds.tsv
+
+The first file is a copy of the data user gave to the algoritm, with the rowxxx identifiers needed as first column.
+The second file gives the hypothetical annotations (kegg ID and comon name used in KEGG) for the retrieved metabolites.
+
+please note that only metabolites which are present in KEGG can be retrieved using this approach.
+
+#TODO!!! path, filename to auto select latest or in config?? or see git if name output cn change name/dir??
+
+```{r load-mummichig-result-table}
+#' load mummichog result files
+DIR <- '1734448517.6233082.t2'    #umetab-bmi-lm
+#DIR <- "1732118659.9126198.t2"   #test
+
+list.dirs(path = DATA_INPUT_PATH, full.names = TRUE, recursive = TRUE)
+list.dirs(path = DATA_OUTPUT_PATH, full.names = TRUE, recursive = TRUE)
+
+DATA_OUTPUT_PATH <- paste0('/home/mdegraeve/Documents/Files/Work_Eurac/Projects/biochem_pathway_analysis/', DIR, '/tables')
+DATA_OUTPUT_PATH <- paste0(DATA_PATH, DIR, '/tables')
+
+
+#' userInput_to_EmpiricalCompounds
+handle <- file.path(DATA_OUTPUT_PATH, "userInput_to_EmpiricalCompounds.tsv")
+userInput_to_EmpiricalCompounds <- read.csv(handle, header = TRUE, sep="\t")  |>
+    as.data.frame()
+userInput_to_EmpiricalCompounds[1:10, 1:10]
+
+```
+
+info regarding results file:
+
+- adducts = str_row_ion
+- keggid = compounds, also sometimes CE id from bigg)
+- name = compound_names
+
+*Remark 1*
+
+one rowidxxx = compid = metabolite can have >1 matching kegg id, eg.
+
+example:
+
+#row957 E522 row957_M+H[1+];row970_M(C13)+H[1+] C00062;C00792
+#L-Arginine$D-Arginine; D-2-Amino-5-guanidinovaleric acid
+
+while in plot the label at E522 = L-Arginine
+
+So.... want not these results as such but the table in the result.html report.
+there only ones I want listed with 1 *best guess*
+
+EmpiricalCompound	| Input m/z                     |	Retention time	| ion	           | mz_diff	| Statistic |	Significant
+E522 	              Best guess: C00792, D-Arginine	                  C00062, C00792
+	                  175.1183 	                      50.0	            M+H[1+]	        -0.0007	  -5.29	        yes
+	                  176.1216 	                      39.0	            M(C13)+H[1+]  	-0.0008	  -23.32	      yes
+
+2 options: C00062, C00792.
+both are correct, one keggid is D- and other
+L-form... so only know using bio background it is the L-form in mammals.
+
+fyi: in activ netw edges w EC nrs
+fyi: the '$' signs means ID annot is either x or y, eg L-Arginine$D-Arginine
+	 the ';' is a synonym of x, eg D-2-Amino-5-guanidinovaleric acid
+	 
+solution:  keep all options into 1 rowidxxx
+
+
+*Remark 2*
+
+The entries with double rownames (1 compID with >1 match) are both possible too, but these are not
+mentioned in the html report, and no idea how to know which one is correct.
+
+example:
+
+#row1020	E35	row1020_M+H[1+]	C13747;C07480;C00031;C00221;C02336;C00267;C00962;C00795;C00137;C00984;C00159	1,7-Dimethylxanthine; Paraxanthine$$D-Glucose$beta-D-Glucose$beta-D-Fructose; beta-Fruit sugar; beta-D-arabino-Hexulose; beta-Levulose; #Fructose$alpha-D-Glucose$beta-D-Galactose$D-Tagatose; lyxo-Hexulose$myo-Inositol$alpha-D-Galactose$D-Mannose	row1020	181.0712	502	0.165105022347	-1.45	AE_pos_181.0712_502
+#row1020	E422	row1020_M+Na[1+]	CE4970;CE4968	2-methylbutyrylglycine$isovalerylglycine	row1020	181.0712	502	0.165105022347	-1.45	AE_pos_181.0712_502
+
+so M+H for a hexose-weigth, OR M+Na for CExxx (not kegg id but CE4970te in BiGG models ID:
+http://bigg.ucsd.edu/models/universal/metabolites/CE4970) =
+2-methylbutyrylglycine$isovalerylglycine (isomers)
+
+solution: want to keep both, merge into 1 rowidxxx
+
+
+
+*Remark 3*
+
+1 rowid, one emperical id, but lots of KEGG IDS (eg all hexoses), with analysis
+best guess it is mannose. only in html report this decision is made.
+
+example:
+
+#row1239	E545	row1239_M+Na[1+]	C00031;C00221;C02336;C00267;C00962;C00795;C00137;C00984;C00159	D-Glucose$beta-D-Glucose$beta-D-Fructose; beta-Fruit sugar; beta-D-arabino-Hexulose; beta-Levulose; #Fructose$alpha-D-Glucose$beta-D-Galactose$D-Tagatose; lyxo-Hexulose$myo-Inositol$alpha-D-Galactose$D-Mannose	row1239	203.0517	59	2.67774722093E-06	-7.06	AE_pos_203.0517_59
+
+E545 Best guess: C00159, D-Mannose 
+C00031, C00221, C02336, C00267, C00962,
+C00795, C00137, C00984, C00159 203.0517 59.0 M+Na[1+] -0.001 -7.06 yes 
+
+based on module2 and activity network, there also upregulated n-acetl-glc,
+n-acet-man (only indirectly...) and stachyose (gal-gal-glc-frc), myo-inositol
+(glc-OH from g6p). so actually not so sure about this, best to leave all the
+options as description.
+
+alternatively, keep only the annotated ids with 1 hit (but losse the D-/l-aa and
+-/l-sugars. so best to keep all info instead of picking best guess if i'm
+doubting this was actually the best option.
+
+based on m/z diff, Na-adduct and in mammals: row1239 = D-hexose.
+
+TODO: maybe best manual go over reuslts.. (after mva p<0.05), go back to this
+list and description change if needed
+
+solution: keep all options into 1 rowidxxx (same adduct)
+
+
+```{r cleanup-table-unique-rowids}
+#' checks
+#' total rowids (inlc duplic)
+nrow(userInput_to_EmpiricalCompounds)
+#' nr of non-duplic
+length(userInput_to_EmpiricalCompounds$input_row[!duplicated(as.list(userInput_to_EmpiricalCompounds$input_row))])
+#' nr of duplic
+length(unique(userInput_to_EmpiricalCompounds$input_row[duplicated(as.list(userInput_to_EmpiricalCompounds$input_row))]))
+#' needed length if correct merged == unique
+length(unique(as.list(userInput_to_EmpiricalCompounds$input_row)))
+#' nr of exactly 1 time occur in df
+length(subset(userInput_to_EmpiricalCompounds$input_row, !(duplicated(userInput_to_EmpiricalCompounds$input_row) | duplicated(userInput_to_EmpiricalCompounds$input_row, fromLast = TRUE))))
+
+
+#' names of the replicate rowids to be merged
+doubles <- userInput_to_EmpiricalCompounds$input_row[duplicated(as.list(userInput_to_EmpiricalCompounds$input_row))] #double hits, to merge into 1 rowid
+doubles <- unique(doubles)
+
+#' loop to make subdf with solved doubles
+df_all <- NULL
+i <- 1
+for(i in 1:length(doubles)){
+    #print(doubles[i])
+        
+    double_df <- userInput_to_EmpiricalCompounds[userInput_to_EmpiricalCompounds$input_row == doubles[i], ]
+
+    #' add to empty df
+    df <- NULL
+    df$input_row <- double_df$input_row[1]
+    df$EID <- paste(c(unlist(double_df$EID)),collapse = ';')
+    df$str_row_ion <- paste(c(unlist(double_df$str_row_ion)),collapse = ';')
+    df$compounds <- paste(c(unlist(double_df$compounds)),collapse = ';')
+    df$compound_names  <- paste(c(unlist(double_df$compound_names)),collapse = ';')
+    df$input_row.1 <- double_df$input_row[1]
+    df$m.z  <- paste(c(unlist(double_df$m.z)),collapse = ';')
+    df$retention_time  <- paste(c(unlist(double_df$retention_time)),collapse = ';')
+    df$p_value  <- paste(c(unlist(double_df$p_value)),collapse = ';')
+    df$statistic  <- paste(c(unlist(double_df$statistic)),collapse = ';')
+    df$CompoundID_from_user <- paste(c(unlist(double_df$CompoundID_from_user)),collapse = ';')
+    df <- as.data.frame(df)
+
+    df_all <- rbind(df_all, df) 
+}
+
+#' checks
+dim(df_all)
+df_all[, 1:3]
+colnames(df_all)
+length(unique(as.list(df_all$input_row)))
+
+#' subset original mummichog results table with rowid nr exactly 1 time occur in df
+df_unique <- subset(userInput_to_EmpiricalCompounds, !(duplicated(userInput_to_EmpiricalCompounds$input_row) | duplicated(userInput_to_EmpiricalCompounds$input_row, fromLast = TRUE)))
+dim(df_unique)
+colnames(df_unique)
+
+#' merge the non-duplic and the solved into 1 df again
+clean_df <- rbind(df_unique, df_all)
+clean_df <- clean_df[order(clean_df$input_row),]
+dim(clean_df)
+rownames(clean_df) <- clean_df$input_row
+
+#' write for testing
+handle <- file.path(DATA_PATH, 'cleanup_mummichog_output.txt')
+write.table(clean_df, file=handle, sep ="\t", row.names = FALSE, col.names = TRUE)
+
+#fyi, top metab from lm FT01399 == glutamate according to mummichog
+
+```
+
+#todo!!!! see in clean df still some rowIDs merged in the untargeted metab df!!!
+
+
+The computational 'EmpiricalCompound' and other information for a tentative
+metabolite is now linked to the feature ID from the untargeted metabolomics
+dataset. The candidate metabolite can group multiple ions, and be any of the
+isobaric/isomeric species. See the original Mummichog 'results.html' for the
+visualisation and for the EmpiricalCompounds prioritized by
+pathway/module analysis.  
+
+TODO: how add these to umetab dataset? using summExp object add description
+maybe? FINDME!!! (todo after lcms semi quant untarg added, see there how).
+
+
+
+# Acknowlegments
+
+
+
+
+# Session information
+
+```{r}
+sessionInfo()
+
+```
