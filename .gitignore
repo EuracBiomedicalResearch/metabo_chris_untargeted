@@ -13,4 +13,5 @@ phenodata.txt
 *.sqlite
 .Rhistory
 *.txt
-
+*.odt
+*.sh
